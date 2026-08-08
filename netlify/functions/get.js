@@ -1,6 +1,8 @@
-const { getStore } = require('@netlify/blobs');
+const { getStore, connectLambda } = require('@netlify/blobs');
 
 exports.handler = async (event) => {
+  connectLambda(event);
+
   const id = event.queryStringParameters && event.queryStringParameters.id;
   if (!id) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Falta el id' }) };
