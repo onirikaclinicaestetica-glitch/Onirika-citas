@@ -26,9 +26,49 @@ button,input,select,textarea{font:inherit}.hidden{display:none!important}
 <div id="app"></div>
 <script>
 const CONFIG={whatsapp:'34624132590',address:'Calle Eduardo Boscà, 32, 46023 Valencia',parkingName:'Parking del Palau S.A.'};
+const PRECARE={
+  'Sculpt360':[
+    '💧 Ven bien hidratada.',
+    '🍽️ Evita comidas copiosas antes.',
+    '🧴 No uses cremas/aceites en la zona.',
+    '⚕️ Avísanos de embarazo, marcapasos, cirugía reciente o condición médica relevante.'
+  ],
+  'Cellulite':[
+    '💧 Ven bien hidratada.',
+    '🧴 No uses cremas/aceites en las piernas.',
+    '⚕️ Avísanos si tienes varices importantes, inflamación o problemas circulatorios.'
+  ],
+  'Porcelain Skin':[
+    '✨ Evita retinol, ácidos y exfoliantes 48–72 h antes.',
+    '☀️ Evita sol intenso.',
+    '⚕️ Avísanos si tienes irritación, heridas, herpes o tratamiento facial reciente.'
+  ],
+  'Expert Jet':[
+    '✨ Evita retinol, ácidos y exfoliantes 48–72 h antes.',
+    '☀️ Evita sol intenso.',
+    '⚕️ Avísanos si tienes irritación, heridas, herpes o acné muy inflamado.'
+  ],
+  'ONÍRIKA LASER 3D':[
+    '🪒 Rasura 24 h antes.',
+    '🚫 No uses cera/pinzas.',
+    '☀️ Evita bronceado reciente.',
+    '🧴 Ven sin crema/desodorante en la zona.',
+    '💊 Avísanos si tomas medicación.'
+  ]
+};
+const TREATMENT_OPTIONS=Object.keys(PRECARE);
+function precareFor(treatment){return PRECARE[treatment]||[]}
+function applyPrecare(){
+  const t=document.getElementById('treatment');
+  const i=document.getElementById('instructions');
+  if(!t||!i)return;
+  const tips=precareFor(t.value.trim());
+  if(tips.length)i.value=tips.join('\n');
+}
+
 const qs=new URLSearchParams(location.search);
 const isClient=qs.get('view')==='client'||qs.get('d')||qs.get('c')||qs.get('id');
-const defaults={name:'Romina',date:'2026-08-18',time:'11:30',treatment:'INDIBA EDNA PRO MAX',subtitle:'Porcelain Skin',professional:'Elsa',duration:'60 minutos',instructions:'Ven con la piel limpia y sin maquillaje.|Evita la exposición solar 24 h antes.|Llega 10 minutos antes de tu cita.',id:'J8KL42'};
+const defaults={name:'Romina',date:'2026-08-18',time:'11:30',treatment:'Porcelain Skin',subtitle:'INDIBA EDNA PRO MAX',professional:'Elsa',duration:'60 minutos',instructions:precareFor('Porcelain Skin').join('|'),id:'J8KL42'};
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function b64encode(str){return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,(m,p1)=>String.fromCharCode('0x'+p1)))}
 function b64decode(str){return decodeURIComponent(atob(str).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''))}
@@ -61,7 +101,7 @@ function clientHTML(d,withToolbar=false){const ins=(d.instructions||'').split('|
 function addCalendar(e,date,time,treatment){e.preventDefault();const start=new Date(`${date}T${time}:00`);const end=new Date(start.getTime()+60*60*1000);const fmt=d=>d.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');const text=encodeURIComponent(`ONÍRIKA · ${treatment}`);const dates=fmt(start)+'/'+fmt(end);window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${dates}&location=${encodeURIComponent(CONFIG.address)}`,'_blank')}
 function makeId(){const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';return Array.from({length:6},()=>chars[Math.floor(Math.random()*chars.length)]).join('')}
 function generatorHTML(){return `<div class="shell"><div class="tool-head"><div class="kicker">ONÍRIKA APPOINTMENT EXPERIENCE · OAE-01</div><div class="brand">ONÍRIKA</div><div class="brand-sub">CLÍNICA MÉDICO-ESTÉTICA <span>·</span> VALENCIA</div><h1>Generador de confirmaciones</h1><p>Rellena la cita, genera el enlace y abre WhatsApp con el mensaje preparado.</p></div><div class="workspace"><aside class="panel form-panel"><h2>Nueva confirmación</h2><div class="intro">La dirección, Google Maps, Parking del Palau y la política de cancelación ya quedan configurados por defecto.</div>
-<div class="field"><label>Nombre de la paciente</label><input id="name" value="María López"></div><div class="grid2"><div class="field"><label>Fecha</label><input id="date" type="date" value="2026-08-18"></div><div class="field"><label>Hora</label><input id="time" type="time" value="11:30"></div></div><div class="field"><label>Tratamiento</label><input id="treatment" value="INDIBA EDNA PRO MAX"></div><div class="field"><label>Nombre / subtítulo del protocolo</label><input id="subtitle" value="Porcelain Skin"></div><div class="grid2"><div class="field"><label>Profesional</label><input id="professional" value="Elsa"></div><div class="field"><label>Duración</label><input id="duration" value="60 minutos"></div></div><div class="field"><label>Indicaciones especiales</label><textarea id="instructions">Ven con la piel limpia y sin maquillaje.\nEvita la exposición solar 24 h antes.\nLlega 10 minutos antes de tu cita.</textarea></div><button class="primary" onclick="generate()">Generar confirmación</button><button class="secondary" onclick="resetDemo()">Restablecer ejemplo</button><div id="result" class="result hidden"><div class="lab">URL de producción</div><div class="urlbox"><code id="prodUrl"></code><button class="copy" onclick="copyText('prodUrl')">⧉</button></div><div class="wa-preview" id="waText"></div><button class="primary" style="margin-top:10px" onclick="openWhatsApp()">Abrir WhatsApp con mensaje</button><button class="secondary" onclick="openClient()">Abrir vista de la clienta</button><div class="note">Esta URL es corta y real: la cita queda guardada de forma segura y el enlace solo lleva un código de referencia. Los botones de reprogramar/cancelar en la vista de la clienta escriben directo al WhatsApp de la clínica (${CONFIG.whatsapp.replace(/^34/,'+34 ')}).</div></div></aside><main id="preview"></main></div></div>`}
+<div class="field"><label>Nombre de la paciente</label><input id="name" value="María López"></div><div class="grid2"><div class="field"><label>Fecha</label><input id="date" type="date" value="2026-08-18"></div><div class="field"><label>Hora</label><input id="time" type="time" value="11:30"></div></div><div class="field"><label>Tratamiento</label><select id="treatment">${TREATMENT_OPTIONS.map(x=>`<option value="${x}"${x==='Porcelain Skin'?' selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>Nombre / subtítulo del protocolo</label><input id="subtitle" value="INDIBA EDNA PRO MAX"></div><div class="grid2"><div class="field"><label>Profesional</label><input id="professional" value="Elsa"></div><div class="field"><label>Duración</label><input id="duration" value="60 minutos"></div></div><div class="field"><label>Indicaciones especiales</label><textarea id="instructions">${precareFor('Porcelain Skin').join('\n')}</textarea></div><button class="primary" onclick="generate()">Generar confirmación</button><button class="secondary" onclick="resetDemo()">Restablecer ejemplo</button><div id="result" class="result hidden"><div class="lab">URL de producción</div><div class="urlbox"><code id="prodUrl"></code><button class="copy" onclick="copyText('prodUrl')">⧉</button></div><div class="wa-preview" id="waText"></div><button class="primary" style="margin-top:10px" onclick="openWhatsApp()">Abrir WhatsApp con mensaje</button><button class="secondary" onclick="openClient()">Abrir vista de la clienta</button><div class="note">Esta URL es corta y real: la cita queda guardada de forma segura y el enlace solo lleva un código de referencia. Los botones de reprogramar/cancelar en la vista de la clienta escriben directo al WhatsApp de la clínica (${CONFIG.whatsapp.replace(/^34/,'+34 ')}).</div></div></aside><main id="preview"></main></div></div>`}
 let generated=null;
 function vals(){return {name:document.getElementById('name').value.trim()||'Cliente',date:document.getElementById('date').value,time:document.getElementById('time').value,treatment:document.getElementById('treatment').value.trim(),subtitle:document.getElementById('subtitle').value.trim(),professional:document.getElementById('professional').value.trim(),duration:document.getElementById('duration').value.trim(),instructions:document.getElementById('instructions').value.split(/\n+/).map(x=>x.trim()).filter(Boolean).join('|'),id:generated?.id||'J8KL42'}}
 function live(){if(!document.getElementById('preview'))return;document.getElementById('preview').innerHTML=clientHTML(vals())}
@@ -71,8 +111,8 @@ async function generate(){const d=vals();generated=d;const btn=document.querySel
 function openClient(){if(!generated)return generate().then(openClient);const d=generated;const u=d.id&&d.id.length===7?location.pathname+'?id='+d.id:location.pathname+'?'+packedParam(d).toString();window.open(u,'_blank')}
 function openWhatsApp(){if(!generated)generate();const txt=document.getElementById('waText').textContent;window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank')}
 async function copyText(id){const t=document.getElementById(id).textContent;try{await navigator.clipboard.writeText(t);alert('Enlace copiado')}catch(e){prompt('Copia el enlace:',t)}}
-function resetDemo(){document.getElementById('name').value='María López';document.getElementById('date').value='2026-08-18';document.getElementById('time').value='11:30';document.getElementById('treatment').value='INDIBA EDNA PRO MAX';document.getElementById('subtitle').value='Porcelain Skin';document.getElementById('professional').value='Elsa';document.getElementById('duration').value='60 minutos';document.getElementById('instructions').value='Ven con la piel limpia y sin maquillaje.\nEvita la exposición solar 24 h antes.\nLlega 10 minutos antes de tu cita.';generated=null;document.getElementById('result').classList.add('hidden');live()}
-async function init(){if(isClient){const id=qs.get('id');if(id){document.getElementById('app').innerHTML=loadingHTML();try{const d={...defaults,...await fetchById(id)};document.getElementById('app').innerHTML='<div class="client-only">'+clientHTML(d,true)+'</div>'}catch(e){document.getElementById('app').innerHTML=notFoundHTML()}}else{document.getElementById('app').innerHTML='<div class="client-only">'+clientHTML(getData(),true)+'</div>'}}else{document.getElementById('app').innerHTML=generatorHTML();document.querySelectorAll('input,textarea').forEach(el=>el.addEventListener('input',live));live()}}
+function resetDemo(){document.getElementById('name').value='María López';document.getElementById('date').value='2026-08-18';document.getElementById('time').value='11:30';document.getElementById('treatment').value='Porcelain Skin';document.getElementById('subtitle').value='INDIBA EDNA PRO MAX';document.getElementById('professional').value='Elsa';document.getElementById('duration').value='60 minutos';document.getElementById('instructions').value=precareFor('Porcelain Skin').join('\n');generated=null;document.getElementById('result').classList.add('hidden');live()}
+async function init(){if(isClient){const id=qs.get('id');if(id){document.getElementById('app').innerHTML=loadingHTML();try{const d={...defaults,...await fetchById(id)};document.getElementById('app').innerHTML='<div class="client-only">'+clientHTML(d,true)+'</div>'}catch(e){document.getElementById('app').innerHTML=notFoundHTML()}}else{document.getElementById('app').innerHTML='<div class="client-only">'+clientHTML(getData(),true)+'</div>'}}else{document.getElementById('app').innerHTML=generatorHTML();document.querySelectorAll('input,textarea,select').forEach(el=>el.addEventListener('input',live));const treatment=document.getElementById('treatment');if(treatment)treatment.addEventListener('change',()=>{applyPrecare();generated=null;live()});live()}}
 init();
 </script>
 </body>
