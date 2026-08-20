@@ -83,7 +83,11 @@ function b64decode(str){return decodeURIComponent(atob(str).split('').map(c=>'%'
 const SHORT={n:'name',dt:'date',t:'time',tr:'treatment',s:'subtitle',p:'professional',du:'duration',i:'instructions',id:'id'}
 function expandShort(o){const d={};for(const k in o)if(SHORT[k])d[SHORT[k]]=o[k];return d}
 function getData(){let d={...defaults};const c=qs.get('c');if(c){try{Object.assign(d,expandShort(JSON.parse(LZString.decompressFromEncodedURIComponent(c))))}catch(e){}return d}const packed=qs.get('d');if(packed){try{Object.assign(d,JSON.parse(b64decode(packed)))}catch(e){}return d}for(const k in d){if(qs.get(k))d[k]=qs.get(k)}return d}
-async function fetchById(id){const r=await fetch('/.netlify/functions/get?id='+encodeURIComponent(id));if(!r.ok)throw new Error('not_found');return r.json()}
+async function fetchById(id){
+  const r=await fetch('/.netlify/functions/get-oae?id='+encodeURIComponent(id));
+  if(!r.ok)throw new Error('not_found');
+  return r.json();
+}
 function loadingHTML(){return `<div class="client-only"><div class="preview-wrap" style="min-height:260px;display:flex;align-items:center;justify-content:center;padding:40px"><p style="color:#77736b;font-size:13px">Cargando tu cita…</p></div></div>`}
 function notFoundHTML(){return `<div class="client-only"><div class="preview-wrap" style="padding:40px;text-align:center"><div class="brand">ONÍRIKA</div><p style="color:#77736b;font-size:13px;margin:18px 0">No hemos podido encontrar esta cita. El enlace puede haber caducado o ser incorrecto.</p><a class="action" style="display:inline-block" target="_blank" href="https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent('Hola, no puedo abrir el enlace de mi cita, ¿me ayudáis?')}">Escribir por WhatsApp</a></div></div>`}
 function longDate(s){const dt=new Date(s+'T12:00:00');return new Intl.DateTimeFormat('es-ES',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(dt).replace(/^./,c=>c.toUpperCase())}
