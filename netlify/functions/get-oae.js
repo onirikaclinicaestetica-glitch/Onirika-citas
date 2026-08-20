@@ -4,16 +4,18 @@ exports.handler = async (event) => {
   if (!id) {
     return {
       statusCode: 400,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: 'Falta el id' })
     };
   }
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
     return {
       statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: 'Configuración de Supabase incompleta' })
     };
   }
@@ -33,8 +35,7 @@ exports.handler = async (event) => {
 
     const response = await fetch(url, {
       headers: {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        apikey: SUPABASE_SECRET_KEY,
         Accept: 'application/json'
       }
     });
@@ -44,6 +45,7 @@ exports.handler = async (event) => {
 
       return {
         statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           error: 'Error al consultar Supabase',
           detail
@@ -56,6 +58,7 @@ exports.handler = async (event) => {
     if (!rows || rows.length === 0) {
       return {
         statusCode: 404,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ error: 'OAE no encontrado' })
       };
     }
@@ -66,6 +69,7 @@ exports.handler = async (event) => {
     if (!appointment) {
       return {
         statusCode: 404,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ error: 'Cita asociada no encontrada' })
       };
     }
@@ -75,7 +79,6 @@ exports.handler = async (event) => {
     const staff = appointment.staff || {};
 
     const start = new Date(appointment.starts_at);
-    const end = new Date(appointment.ends_at);
 
     const dateFormatter = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Europe/Madrid',
@@ -125,6 +128,7 @@ exports.handler = async (event) => {
   } catch (e) {
     return {
       statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         error: 'Error interno al leer OAE',
         detail: e.message
