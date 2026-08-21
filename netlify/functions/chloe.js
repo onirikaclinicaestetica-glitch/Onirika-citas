@@ -473,6 +473,7 @@ async function interpretClientData(message) {
           {
             role: 'system',
             content:
+content:
 `Extrae únicamente los datos personales que la persona haya escrito explícitamente.
 
 No inventes ningún dato.
@@ -487,8 +488,7 @@ Si escribe email, extráelo.
 
 Si falta un dato, devuelve null.
 
-No respondas conversacionalmente.`
-            Si la persona indica que la cita es para otra persona, detecta:
+Si la persona indica que la cita es para otra persona, detecta:
 
 booking_for_other_person = true
 
@@ -510,6 +510,8 @@ relationship = null
 contact_name = null
 
 Nunca inventes nombres, relaciones ni datos.
+
+No respondas conversacionalmente.`
           },
 
           {
