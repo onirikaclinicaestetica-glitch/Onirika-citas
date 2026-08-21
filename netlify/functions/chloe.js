@@ -107,12 +107,12 @@ exports.handler = async (event) => {
     });
 
     if (from_time) {
-      params.set('from_time', from_time);
-    }
+  params.set('time_from', from_time);
+}
 
-    if (to_time) {
-      params.set('to_time', to_time);
-    }
+if (to_time) {
+  params.set('time_to', to_time);
+}
 
     const availabilityUrl =
       `https://citas.onirikaclinicaestetica.com/.netlify/functions/availability?${params.toString()}`;
