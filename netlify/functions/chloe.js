@@ -945,7 +945,7 @@ relationship,
 
 contactName,
 contactPhone,
-relationship,,
+relationship,
 
       state:
         'AWAITING_PHONE'
