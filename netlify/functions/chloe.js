@@ -496,8 +496,27 @@ Ejemplos:
 "Quiero reservar para mi madre"
 "La cita es para mi marido"
 
-relationship debe indicar la relación desde el punto de vista del contacto:
-hija, hijo, madre, padre, pareja, esposo, esposa, familiar u otro.
+relationship describe SIEMPRE quién es el contacto respecto de la persona que recibirá el tratamiento.
+
+Ejemplos:
+
+"La cita es para mi hija Lucía. Yo soy su madre María"
+relationship = madre
+
+"La cita es para mi hijo Lucas. Yo soy su padre Carlos"
+relationship = padre
+
+"Estoy reservando para mi madre Ana. Yo soy su hija"
+relationship = hija
+
+"Estoy reservando para mi marido"
+relationship = esposa, únicamente si la persona lo expresa claramente.
+
+Nunca inviertas la relación.
+
+Si el mensaje no permite conocer con seguridad la relación del contacto respecto del paciente, usa "familiar".
+
+No deduzcas madre/padre, esposo/esposa u otra relación basándote únicamente en el nombre de una persona.
 
 El campo nombre y apellidos deben corresponder SIEMPRE a la persona que recibirá el tratamiento.
 
