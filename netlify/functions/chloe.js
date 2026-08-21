@@ -1032,6 +1032,36 @@ async function reprogramAppointment({
   return result[0];
 }
 // =========================================================
+// CANCELAR CITA EXISTENTE
+// =========================================================
+
+async function cancelAppointment({
+  appointmentId,
+  clinicCode = 'VALENCIA',
+  reason = null
+}) {
+
+  const result = await supabaseRpc(
+    'cancel_appointment',
+    {
+      p_appointment_id: appointmentId,
+      p_clinic_code: clinicCode,
+      p_reason: reason
+    }
+  );
+
+  if (
+    !Array.isArray(result) ||
+    result.length === 0
+  ) {
+    throw new Error(
+      'No se pudo cancelar la cita'
+    );
+  }
+
+  return result[0];
+}
+// =========================================================
 // HANDLER PRINCIPAL CHLOE
 // =========================================================
 
@@ -1146,6 +1176,31 @@ if (memory.state === 'BOOKED') {
       reply
     });
   }
+  // =====================================================
+// SOLICITUD DE CANCELACIÓN
+// =====================================================
+
+if (bookedIntent.intent === 'CANCEL') {
+
+  const reply =
+    'Claro ✨ Antes de hacerlo, necesito confirmarlo contigo. ¿Confirmas que deseas cancelar tu cita?';
+
+  await updateConversation({
+    conversationId: memory.conversation_id,
+    state: 'AWAITING_CANCEL_CONFIRMATION',
+    lastUserMessage: message,
+    lastChloeReply: reply
+  });
+
+  return jsonResponse(200, {
+    success: true,
+    action: 'CONFIRM_CANCELLATION',
+    conversation_id: memory.conversation_id,
+    appointment_id: memory.booked_appointment_id,
+    service_code: memory.service_code,
+    reply
+  });
+}
   const oaeUrl =
     memory.public_code
       ? `https://citas.onirikaclinicaestetica.com/?id=${memory.public_code}`
@@ -1153,6 +1208,7 @@ if (memory.state === 'BOOKED') {
 
   return jsonResponse(200, {
     success: true,
+    
     action: 'ALREADY_BOOKED',
     conversation_id: memory.conversation_id,
     appointment_id: memory.booked_appointment_id,
@@ -1164,6 +1220,119 @@ if (memory.state === 'BOOKED') {
   });
 }
 // =========================================================
+// CANCELACIÓN — ESPERANDO CONFIRMACIÓN
+// =========================================================
+
+if (
+  memory.state ===
+  'AWAITING_CANCEL_CONFIRMATION'
+) {
+
+  const normalized =
+    String(message || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  const confirmed =
+    [
+      'si',
+      'confirmo',
+      'si confirmo',
+      'si, confirmo',
+      'cancelala',
+      'cancelalo',
+      'cancelar'
+    ].includes(normalized);
+
+  const rejected =
+    [
+      'no',
+      'mejor no',
+      'no gracias',
+      'mantener',
+      'mantenla',
+      'dejala'
+    ].includes(normalized);
+
+  if (rejected) {
+
+    const reply =
+      'Perfecto ✨ Mantengo tu cita tal como está.';
+
+    await updateConversation({
+      conversationId: memory.conversation_id,
+      state: 'BOOKED',
+      lastUserMessage: message,
+      lastChloeReply: reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'CANCELLATION_ABORTED',
+      conversation_id: memory.conversation_id,
+      appointment_id: memory.booked_appointment_id,
+      reply
+    });
+  }
+
+  if (!confirmed) {
+
+    const reply =
+      'Para asegurarme ✨ ¿Confirmas que deseas cancelar tu cita? Puedes responder “sí” o “no”.';
+
+    await updateConversation({
+      conversationId: memory.conversation_id,
+      state: 'AWAITING_CANCEL_CONFIRMATION',
+      lastUserMessage: message,
+      lastChloeReply: reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NEED_CANCELLATION_CONFIRMATION',
+      conversation_id: memory.conversation_id,
+      reply
+    });
+  }
+
+  if (!memory.booked_appointment_id) {
+    throw new Error(
+      'No existe una cita asociada a esta conversación'
+    );
+  }
+
+  const cancelled =
+    await cancelAppointment({
+      appointmentId: memory.booked_appointment_id,
+      clinicCode: memory.clinic_code || 'VALENCIA',
+      reason: 'Cancelación solicitada por cliente mediante CHLOE'
+    });
+
+  const reply =
+    'Listo ✨ Tu cita ha quedado cancelada. Cuando quieras volver a reservar, estaré encantada de ayudarte.';
+
+  await updateConversation({
+    conversationId: memory.conversation_id,
+    state: 'CANCELLED',
+    lastUserMessage: message,
+    lastChloeReply: reply
+  });
+
+  return jsonResponse(200, {
+    success: true,
+    action: 'APPOINTMENT_CANCELLED',
+    conversation_id: memory.conversation_id,
+    appointment_id: memory.booked_appointment_id,
+    service_name: cancelled.service_name,
+    specialist: cancelled.especialista,
+    status: cancelled.status,
+    public_code: memory.public_code,
+    reply
+  });
+}
+    // =========================================================
 // REPROGRAMACIÓN — BUSCAR NUEVOS HORARIOS
 // =========================================================
 
