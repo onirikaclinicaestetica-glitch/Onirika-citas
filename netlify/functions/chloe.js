@@ -473,7 +473,6 @@ async function interpretClientData(message) {
           {
             role: 'system',
             content:
-content:
 `Extrae únicamente los datos personales que la persona haya escrito explícitamente.
 
 No inventes ningún dato.
