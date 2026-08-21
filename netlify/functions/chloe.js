@@ -145,10 +145,27 @@ async function updateConversation({
   lastUserMessage = null,
   lastChloeReply = null
 }) {
+  return supabaseRpc(
+    'update_chloe_conversation',
+    {
+      p_conversation_id: conversationId,
+      p_service_code: serviceCode,
+      p_appointment_type: appointmentType,
+      p_from_date: fromDate,
+      p_to_date: toDate,
+      p_from_time: fromTime,
+      p_to_time: toTime,
+      p_offered_slots: offeredSlots,
+      p_selected_slot_start: selectedSlotStart,
+      p_state: state,
+      p_last_user_message: lastUserMessage,
+      p_last_chloe_reply: lastChloeReply
+    }
+  );
+}
 // =========================================================
 // GUARDAR DATOS DE LA PERSONA ATENDIDA
-// =========================================================
-
+// ========================================================= 
 async function updateClientData({
   conversationId,
   nombre = null,
@@ -176,25 +193,6 @@ async function updateClientData({
     }
   );
 }
-  return supabaseRpc(
-    'update_chloe_conversation',
-    {
-      p_conversation_id: conversationId,
-      p_service_code: serviceCode,
-      p_appointment_type: appointmentType,
-      p_from_date: fromDate,
-      p_to_date: toDate,
-      p_from_time: fromTime,
-      p_to_time: toTime,
-      p_offered_slots: offeredSlots,
-      p_selected_slot_start: selectedSlotStart,
-      p_state: state,
-      p_last_user_message: lastUserMessage,
-      p_last_chloe_reply: lastChloeReply
-    }
-  );
-}
-
 
 // =========================================================
 // DETECTAR ELECCIÓN DE HORARIO
