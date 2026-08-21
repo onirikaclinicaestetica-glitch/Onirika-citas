@@ -731,6 +731,307 @@ async function findExistingClient({
   return result[0];
 }
 // =========================================================
+// INTERPRETAR GESTIÓN DE CITA EXISTENTE
+// =========================================================
+
+async function interpretBookedAppointmentIntent(message) {
+
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+  if (!OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY no configurada');
+  }
+
+  const response = await fetch(
+    'https://api.openai.com/v1/responses',
+    {
+      method: 'POST',
+
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`
+      },
+
+      body: JSON.stringify({
+        model: 'gpt-5.6-luna',
+        store: false,
+
+        input: [
+          {
+            role: 'system',
+            content:
+`Clasifica qué quiere hacer una persona con una cita ya existente.
+
+Devuelve únicamente una de estas intenciones:
+
+RESCHEDULE
+CANCEL
+CHECK_APPOINTMENT
+OTHER
+
+Ejemplos:
+
+"Quiero cambiar mi cita"
+"¿Podemos moverla al miércoles?"
+"Necesito otra hora"
+=> RESCHEDULE
+
+"Quiero cancelar"
+"No podré ir"
+=> CANCEL
+
+"¿A qué hora tengo la cita?"
+"¿Cuándo era mi cita?"
+"Recuérdame mi cita"
+=> CHECK_APPOINTMENT
+
+"Gracias"
+"Perfecto"
+"Vale"
+=> OTHER
+
+No inventes información.`
+          },
+
+          {
+            role: 'user',
+            content: message
+          }
+        ],
+
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'booked_appointment_intent',
+            strict: true,
+
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+
+              properties: {
+                intent: {
+                  type: 'string',
+                  enum: [
+                    'RESCHEDULE',
+                    'CANCEL',
+                    'CHECK_APPOINTMENT',
+                    'OTHER'
+                  ]
+                }
+              },
+
+              required: [
+                'intent'
+              ]
+            }
+          }
+        }
+      })
+    }
+  );
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result?.error?.message ||
+      'Error interpretando gestión de cita'
+    );
+  }
+
+  const text = extractOutputText(result);
+
+  if (!text) {
+    throw new Error(
+      'OpenAI no devolvió intención de gestión de cita'
+    );
+  }
+
+  return JSON.parse(text);
+}
+// =========================================================
+// INTERPRETAR PREFERENCIA DE REPROGRAMACIÓN
+// =========================================================
+
+async function interpretReschedulePreference(message) {
+
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+  if (!OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY no configurada');
+  }
+
+  const nowMadrid = new Date().toLocaleDateString(
+    'en-CA',
+    {
+      timeZone: 'Europe/Madrid'
+    }
+  );
+
+  const response = await fetch(
+    'https://api.openai.com/v1/responses',
+    {
+      method: 'POST',
+
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`
+      },
+
+      body: JSON.stringify({
+        model: 'gpt-5.6-luna',
+        store: false,
+
+        input: [
+          {
+            role: 'system',
+
+            content:
+`Interpreta únicamente la nueva preferencia de fecha y horario
+para reprogramar una cita en Valencia, España.
+
+Fecha actual en Valencia:
+${nowMadrid}
+
+Devuelve fechas en formato YYYY-MM-DD.
+Devuelve horas en formato HH:MM.
+
+Reglas:
+
+- Si dice un día concreto como "miércoles",
+  usa el próximo miércoles futuro.
+
+- Si dice "mañana", calcula mañana
+  respecto de la fecha actual indicada.
+
+- "por la mañana":
+  from_time = "10:00"
+  to_time = "14:00"
+
+- "por la tarde":
+  from_time = "16:00"
+  to_time = "20:00"
+
+- Si da una hora concreta, por ejemplo "a las 18",
+  from_time = "18:00"
+  to_time = "18:00"
+
+- Si solo da fecha y no franja,
+  las horas deben ser null.
+
+- Si solo da franja pero no fecha,
+  las fechas deben ser null.
+
+- from_date y to_date deben ser el mismo día
+  cuando la persona pide un día concreto.
+
+No inventes una fecha ni una hora que la persona no haya indicado
+o que no pueda deducirse claramente.`
+          },
+
+          {
+            role: 'user',
+            content: message
+          }
+        ],
+
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'reschedule_preference',
+            strict: true,
+
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+
+              properties: {
+                from_date: {
+                  type: ['string', 'null']
+                },
+
+                to_date: {
+                  type: ['string', 'null']
+                },
+
+                from_time: {
+                  type: ['string', 'null']
+                },
+
+                to_time: {
+                  type: ['string', 'null']
+                }
+              },
+
+              required: [
+                'from_date',
+                'to_date',
+                'from_time',
+                'to_time'
+              ]
+            }
+          }
+        }
+      })
+    }
+  );
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result?.error?.message ||
+      'Error interpretando nueva fecha de cita'
+    );
+  }
+
+  const text = extractOutputText(result);
+
+  if (!text) {
+    throw new Error(
+      'OpenAI no devolvió preferencia de reprogramación'
+    );
+  }
+
+  return JSON.parse(text);
+}
+// =========================================================
+// REPROGRAMAR CITA EXISTENTE
+// =========================================================
+
+async function reprogramAppointment({
+  appointmentId,
+  newStart,
+  clinicCode = 'VALENCIA'
+}) {
+
+  const result = await supabaseRpc(
+    'reprogram_appointment',
+    {
+      p_appointment_id:
+        appointmentId,
+
+      p_new_start:
+        newStart,
+
+      p_clinic_code:
+        clinicCode
+    }
+  );
+
+  if (
+    !Array.isArray(result) ||
+    result.length === 0
+  ) {
+    throw new Error(
+      'No se pudo reprogramar la cita'
+    );
+  }
+
+  return result[0];
+}
+// =========================================================
 // HANDLER PRINCIPAL CHLOE
 // =========================================================
 
@@ -811,7 +1112,40 @@ exports.handler = async (event) => {
 // =====================================================
 
 if (memory.state === 'BOOKED') {
+  const bookedIntent =
+    await interpretBookedAppointmentIntent(message);
 
+  if (bookedIntent.intent === 'RESCHEDULE') {
+
+    const reply =
+      'Claro ✨ Podemos cambiar tu cita. ¿Qué día u horario te vendría mejor?';
+
+    await updateConversation({
+      conversationId:
+        memory.conversation_id,
+
+      state:
+        'AWAITING_RESCHEDULE_PREFERENCE',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NEED_RESCHEDULE_PREFERENCE',
+      conversation_id:
+        memory.conversation_id,
+      appointment_id:
+        memory.booked_appointment_id,
+      service_code:
+        memory.service_code,
+      reply
+    });
+  }
   const oaeUrl =
     memory.public_code
       ? `https://citas.onirikaclinicaestetica.com/?id=${memory.public_code}`
@@ -829,7 +1163,264 @@ if (memory.state === 'BOOKED') {
       'Tu cita ya está confirmada ✨ Te dejo nuevamente los detalles de tu experiencia.'
   });
 }
-// =====================================================
+// =========================================================
+// REPROGRAMACIÓN — BUSCAR NUEVOS HORARIOS
+// =========================================================
+
+if (
+  memory.state ===
+  'AWAITING_RESCHEDULE_PREFERENCE'
+) {
+
+  const preference =
+    await interpretReschedulePreference(message);
+
+  const fromDate =
+    preference.from_date;
+
+  const toDate =
+    preference.to_date;
+
+  const fromTime =
+    preference.from_time;
+
+  const toTime =
+    preference.to_time;
+
+
+  // -----------------------------------------
+  // NECESITAMOS AL MENOS UNA FECHA
+  // -----------------------------------------
+
+  if (!fromDate) {
+
+    const reply =
+      'Claro ✨ ¿Qué día te vendría mejor para tu nueva cita?';
+
+    await updateConversation({
+      conversationId:
+        memory.conversation_id,
+
+      state:
+        'AWAITING_RESCHEDULE_PREFERENCE',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action:
+        'NEED_RESCHEDULE_DATE',
+
+      conversation_id:
+        memory.conversation_id,
+
+      reply
+    });
+  }
+
+
+  // -----------------------------------------
+  // CONSULTAR DISPONIBILIDAD REAL
+  // -----------------------------------------
+
+  const params =
+    new URLSearchParams({
+      service:
+        memory.service_code,
+
+      from:
+        fromDate,
+
+      to:
+        toDate || fromDate,
+
+      appointment_type:
+        memory.appointment_type ||
+        'first_visit',
+
+      clinic:
+        memory.clinic_code ||
+        'VALENCIA',
+
+      max_results:
+        '3'
+    });
+
+
+  if (fromTime) {
+    params.set(
+      'time_from',
+      fromTime
+    );
+  }
+
+
+  if (toTime) {
+    params.set(
+      'time_to',
+      toTime
+    );
+  }
+
+
+  const availabilityUrl =
+    `https://citas.onirikaclinicaestetica.com/.netlify/functions/availability?${params.toString()}`;
+
+
+  const availabilityResponse =
+    await fetch(
+      availabilityUrl,
+      {
+        method: 'GET',
+
+        headers: {
+          Accept:
+            'application/json'
+        }
+      }
+    );
+
+
+  const availability =
+    await availabilityResponse.json();
+
+
+  if (!availabilityResponse.ok) {
+
+    return jsonResponse(502, {
+      success: false,
+
+      error:
+        'No se pudo consultar disponibilidad',
+
+      detail:
+        availability
+    });
+  }
+
+
+  const slots =
+    Array.isArray(
+      availability.slots
+    )
+      ? availability.slots
+      : [];
+
+
+  // -----------------------------------------
+  // SIN DISPONIBILIDAD
+  // -----------------------------------------
+
+  if (slots.length === 0) {
+
+    const reply =
+      'En esa franja no tengo disponibilidad. ' +
+      '¿Quieres que busquemos otro horario o un día cercano? ✨';
+
+    await updateConversation({
+      conversationId:
+        memory.conversation_id,
+
+      state:
+        'AWAITING_RESCHEDULE_PREFERENCE',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+
+      action:
+        'NO_RESCHEDULE_SLOTS',
+
+      conversation_id:
+        memory.conversation_id,
+
+      reply
+    });
+  }
+
+
+  // -----------------------------------------
+  // OFRECER NUEVOS HORARIOS
+  // -----------------------------------------
+
+  const slotLabels =
+    slots
+      .map(slot =>
+        slot.time_label
+      )
+      .filter(Boolean);
+
+
+  const reply =
+    `Perfecto ✨ Tengo estas opciones para cambiar tu cita: ${slotLabels.join(', ')}. ¿Cuál prefieres?`;
+
+
+  await updateConversation({
+    conversationId:
+      memory.conversation_id,
+
+    serviceCode:
+      memory.service_code,
+
+    appointmentType:
+      memory.appointment_type ||
+      'first_visit',
+
+    fromDate,
+
+    toDate:
+      toDate || fromDate,
+
+    fromTime,
+
+    toTime,
+
+    offeredSlots:
+      slots,
+
+    state:
+      'OFFERING_RESCHEDULE_SLOTS',
+
+    lastUserMessage:
+      message,
+
+    lastChloeReply:
+      reply
+  });
+
+
+  return jsonResponse(200, {
+    success: true,
+
+    action:
+      'OFFER_RESCHEDULE_SLOTS',
+
+    conversation_id:
+      memory.conversation_id,
+
+    appointment_id:
+      memory.booked_appointment_id,
+
+    service_code:
+      memory.service_code,
+
+    slots,
+
+    reply
+  });
+}
+    // =====================================================
 // DATOS DE LA PERSONA QUE RECIBIRÁ EL TRATAMIENTO
 // =====================================================
 
@@ -1176,7 +1767,184 @@ return jsonResponse(200, {
     // =====================================================
     // 2. SI ESTAMOS ESPERANDO ELECCIÓN DE HORARIO
     // =====================================================
+// =========================================================
+// REPROGRAMACIÓN — ELECCIÓN DE NUEVO HORARIO
+// =========================================================
 
+if (
+  memory.state ===
+    'OFFERING_RESCHEDULE_SLOTS' &&
+  Array.isArray(memory.offered_slots)
+) {
+
+  const selected =
+    findSelectedSlot(
+      message,
+      memory.offered_slots
+    );
+
+
+  // -----------------------------------------
+  // NO IDENTIFICAMOS LA OPCIÓN
+  // -----------------------------------------
+
+  if (!selected) {
+
+    const options =
+      memory.offered_slots
+        .map(slot =>
+          slot.time_label
+        )
+        .filter(Boolean)
+        .join(', ');
+
+    const reply =
+      `No he podido identificar cuál horario prefieres ✨ ` +
+      `Las opciones disponibles son: ${options}.`;
+
+    await updateConversation({
+      conversationId:
+        memory.conversation_id,
+
+      state:
+        'OFFERING_RESCHEDULE_SLOTS',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+
+      action:
+        'NEED_RESCHEDULE_SLOT_SELECTION',
+
+      conversation_id:
+        memory.conversation_id,
+
+      slots:
+        memory.offered_slots,
+
+      reply
+    });
+  }
+
+
+  // -----------------------------------------
+  // COMPROBAR QUE TENEMOS CITA ORIGINAL
+  // -----------------------------------------
+
+  if (!memory.booked_appointment_id) {
+
+    throw new Error(
+      'No existe una cita asociada a esta conversación'
+    );
+  }
+
+
+  // -----------------------------------------
+  // REPROGRAMAR LA MISMA CITA
+  // -----------------------------------------
+
+  const rescheduled =
+    await reprogramAppointment({
+
+      appointmentId:
+        memory.booked_appointment_id,
+
+      newStart:
+        selected.slot_start,
+
+      clinicCode:
+        memory.clinic_code ||
+        'VALENCIA'
+    });
+
+
+  // -----------------------------------------
+  // CONSTRUIR CONFIRMACIÓN
+  // -----------------------------------------
+
+  const dateLabel =
+    selected.date_label ||
+    '';
+
+  const timeLabel =
+    selected.time_label ||
+    '';
+
+  const reply =
+    `Perfecto ✨ Tu cita ha sido reprogramada` +
+    `${dateLabel ? ` para ${dateLabel}` : ''}` +
+    `${timeLabel ? ` a las ${timeLabel}` : ''}. ` +
+    `Te atenderá ${rescheduled.especialista}.`;
+
+
+  // -----------------------------------------
+  // VOLVER A ESTADO BOOKED
+  // Mantiene appointment_id y public_code
+  // -----------------------------------------
+
+  await updateConversation({
+    conversationId:
+      memory.conversation_id,
+
+    selectedSlotStart:
+      selected.slot_start,
+
+    state:
+      'BOOKED',
+
+    lastUserMessage:
+      message,
+
+    lastChloeReply:
+      reply
+  });
+
+
+  const oaeUrl =
+    memory.public_code
+      ? `https://citas.onirikaclinicaestetica.com/?id=${memory.public_code}`
+      : null;
+
+
+  return jsonResponse(200, {
+    success: true,
+
+    action:
+      'APPOINTMENT_RESCHEDULED',
+
+    conversation_id:
+      memory.conversation_id,
+
+    appointment_id:
+      memory.booked_appointment_id,
+
+    specialist:
+      rescheduled.especialista,
+
+    service_name:
+      rescheduled.service_name,
+
+    starts_at:
+      rescheduled.starts_at,
+
+    ends_at:
+      rescheduled.ends_at,
+
+    public_code:
+      memory.public_code,
+
+    oae_url:
+      oaeUrl,
+
+    reply
+  });
+}
     if (
       memory.state === 'OFFERING_SLOTS' &&
       Array.isArray(memory.offered_slots)
