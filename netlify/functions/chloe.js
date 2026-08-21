@@ -145,7 +145,37 @@ async function updateConversation({
   lastUserMessage = null,
   lastChloeReply = null
 }) {
+// =========================================================
+// GUARDAR DATOS DE LA PERSONA ATENDIDA
+// =========================================================
 
+async function updateClientData({
+  conversationId,
+  nombre = null,
+  apellidos = null,
+  telefono = null,
+  email = null,
+  hasOwnPhone = null,
+  state = null
+}) {
+  return supabaseRpc(
+    'update_chloe_client_data',
+    {
+      p_conversation_id: conversationId,
+      p_nombre: nombre,
+      p_apellidos: apellidos,
+      p_telefono: telefono,
+      p_email: email,
+      p_has_own_phone: hasOwnPhone,
+      p_referred_by_cliente_id: null,
+      p_contact_name: null,
+      p_contact_phone: null,
+      p_contact_email: null,
+      p_relationship: null,
+      p_state: state
+    }
+  );
+}
   return supabaseRpc(
     'update_chloe_conversation',
     {
@@ -408,7 +438,119 @@ Devuelve solamente la estructura solicitada.`
   return JSON.parse(text);
 }
 
+// =========================================================
+// INTERPRETAR DATOS BÁSICOS DEL CLIENTE
+// =========================================================
 
+async function interpretClientData(message) {
+
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+  if (!OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY no configurada');
+  }
+
+  const response = await fetch(
+    'https://api.openai.com/v1/responses',
+    {
+      method: 'POST',
+
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`
+      },
+
+      body: JSON.stringify({
+        model: 'gpt-5.6-luna',
+        store: false,
+
+        input: [
+          {
+            role: 'system',
+            content:
+`Extrae únicamente los datos personales que la persona haya escrito explícitamente.
+
+No inventes ningún dato.
+
+Si escribe "Laura Gómez":
+nombre = Laura
+apellidos = Gómez
+
+Si escribe un teléfono, extráelo.
+
+Si escribe email, extráelo.
+
+Si falta un dato, devuelve null.
+
+No respondas conversacionalmente.`
+          },
+
+          {
+            role: 'user',
+            content: message
+          }
+        ],
+
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'chloe_client_data',
+            strict: true,
+
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+
+              properties: {
+                nombre: {
+                  type: ['string', 'null']
+                },
+
+                apellidos: {
+                  type: ['string', 'null']
+                },
+
+                telefono: {
+                  type: ['string', 'null']
+                },
+
+                email: {
+                  type: ['string', 'null']
+                }
+              },
+
+              required: [
+                'nombre',
+                'apellidos',
+                'telefono',
+                'email'
+              ]
+            }
+          }
+        }
+      })
+    }
+  );
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result?.error?.message ||
+      'Error interpretando datos del cliente'
+    );
+  }
+
+  const text = extractOutputText(result);
+
+  if (!text) {
+    throw new Error(
+      'OpenAI no devolvió datos del cliente'
+    );
+  }
+
+  return JSON.parse(text);
+}
 // =========================================================
 // HANDLER PRINCIPAL CHLOE
 // =========================================================
@@ -486,7 +628,184 @@ exports.handler = async (event) => {
       campaign
     });
 
+// =====================================================
+// DATOS DE LA PERSONA QUE RECIBIRÁ EL TRATAMIENTO
+// =====================================================
 
+if (
+  memory.state === 'AWAITING_CLIENT_DATA' ||
+  memory.state === 'AWAITING_PHONE'
+) {
+
+  const extracted =
+    await interpretClientData(message);
+
+  const nombre =
+    extracted.nombre ||
+    memory.nombre ||
+    null;
+
+  const apellidos =
+    extracted.apellidos ||
+    memory.apellidos ||
+    null;
+
+  const telefono =
+    extracted.telefono ||
+    memory.telefono ||
+    null;
+
+  const email =
+    extracted.email ||
+    memory.email ||
+    null;
+
+
+  // -----------------------------------------
+  // TODAVÍA FALTA NOMBRE COMPLETO
+  // -----------------------------------------
+
+  if (!nombre || !apellidos) {
+
+    const reply =
+      'Para preparar tu reserva, ¿me indicas tu nombre y apellidos? ✨';
+
+    await updateClientData({
+      conversationId:
+        memory.conversation_id,
+
+      nombre,
+      apellidos,
+      telefono,
+      email,
+
+      hasOwnPhone: true,
+
+      state:
+        'AWAITING_CLIENT_DATA'
+    });
+
+    await updateConversation({
+      conversationId:
+        memory.conversation_id,
+
+      state:
+        'AWAITING_CLIENT_DATA',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NEED_CLIENT_NAME',
+      conversation_id:
+        memory.conversation_id,
+      reply
+    });
+  }
+
+
+  // -----------------------------------------
+  // TENEMOS NOMBRE, FALTA TELÉFONO
+  // -----------------------------------------
+
+  if (!telefono) {
+
+    const reply =
+      `Gracias, ${nombre} ✨ ¿Me facilitas un teléfono de contacto?`;
+
+    await updateClientData({
+      conversationId:
+        memory.conversation_id,
+
+      nombre,
+      apellidos,
+      email,
+
+      hasOwnPhone: true,
+
+      state:
+        'AWAITING_PHONE'
+    });
+
+    await updateConversation({
+      conversationId:
+        memory.conversation_id,
+
+      state:
+        'AWAITING_PHONE',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NEED_PHONE',
+      conversation_id:
+        memory.conversation_id,
+      nombre,
+      apellidos,
+      reply
+    });
+  }
+
+
+  // -----------------------------------------
+  // YA TENEMOS DATOS MÍNIMOS
+  // -----------------------------------------
+
+  const reply =
+    `Perfecto, ${nombre} ✨ Ya tengo los datos necesarios para preparar tu reserva.`;
+
+  await updateClientData({
+    conversationId:
+      memory.conversation_id,
+
+    nombre,
+    apellidos,
+    telefono,
+    email,
+
+    hasOwnPhone: true,
+
+    state:
+      'READY_TO_BOOK'
+  });
+
+  await updateConversation({
+    conversationId:
+      memory.conversation_id,
+
+    state:
+      'READY_TO_BOOK',
+
+    lastUserMessage:
+      message,
+
+    lastChloeReply:
+      reply
+  });
+
+  return jsonResponse(200, {
+    success: true,
+    action: 'CLIENT_DATA_COMPLETE',
+    conversation_id:
+      memory.conversation_id,
+    nombre,
+    apellidos,
+    telefono,
+    email,
+    reply
+  });
+}
     // =====================================================
     // 2. SI ESTAMOS ESPERANDO ELECCIÓN DE HORARIO
     // =====================================================
