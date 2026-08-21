@@ -550,6 +550,86 @@ No respondas conversacionalmente.`
   return JSON.parse(text);
 }
 // =========================================================
+// CREAR RESERVA REAL
+// =========================================================
+
+async function createBooking({
+  nombre,
+  apellidos,
+  telefono,
+  email,
+  serviceCode,
+  slotStart,
+  clinicCode,
+  source,
+  campaign,
+  hasOwnPhone = true
+}) {
+
+  const response = await fetch(
+    'https://citas.onirikaclinicaestetica.com/.netlify/functions/booking',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+
+      body: JSON.stringify({
+        name: nombre,
+        last_name: apellidos,
+        phone: telefono,
+        email: email,
+
+        service_code: serviceCode,
+        slot_start: slotStart,
+
+        clinic_code: clinicCode,
+        source: source,
+        campaign: campaign,
+
+        has_own_phone: hasOwnPhone
+      })
+    }
+  );
+
+  const result = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(
+      result?.error ||
+      'No se pudo crear la reserva'
+    );
+  }
+
+  return result;
+}
+
+
+// =========================================================
+// FINALIZAR MEMORIA DE RESERVA
+// =========================================================
+
+async function finalizeBooking({
+  conversationId,
+  clienteId,
+  appointmentId,
+  publicCode,
+  reply
+}) {
+
+  return supabaseRpc(
+    'finalize_chloe_booking',
+    {
+      p_conversation_id: conversationId,
+      p_cliente_id: clienteId,
+      p_appointment_id: appointmentId,
+      p_public_code: publicCode,
+      p_last_chloe_reply: reply
+    }
+  );
+}
+// =========================================================
 // HANDLER PRINCIPAL CHLOE
 // =========================================================
 
@@ -625,7 +705,29 @@ exports.handler = async (event) => {
       source,
       campaign
     });
+// =====================================================
+// CITA YA CONFIRMADA
+// =====================================================
 
+if (memory.state === 'BOOKED') {
+
+  const oaeUrl =
+    memory.public_code
+      ? `https://citas.onirikaclinicaestetica.com/?id=${memory.public_code}`
+      : null;
+
+  return jsonResponse(200, {
+    success: true,
+    action: 'ALREADY_BOOKED',
+    conversation_id: memory.conversation_id,
+    appointment_id: memory.booked_appointment_id,
+    public_code: memory.public_code,
+    oae_url: oaeUrl,
+
+    reply:
+      'Tu cita ya está confirmada ✨ Te dejo nuevamente los detalles de tu experiencia.'
+  });
+}
 // =====================================================
 // DATOS DE LA PERSONA QUE RECIBIRÁ EL TRATAMIENTO
 // =====================================================
@@ -756,53 +858,134 @@ if (
   }
 
 
-  // -----------------------------------------
-  // YA TENEMOS DATOS MÍNIMOS
-  // -----------------------------------------
+// -----------------------------------------
+// YA TENEMOS DATOS MÍNIMOS:
+// CREAR LA RESERVA REAL
+// -----------------------------------------
 
-  const reply =
-    `Perfecto, ${nombre} ✨ Ya tengo los datos necesarios para preparar tu reserva.`;
+if (!memory.selected_slot_start) {
+  throw new Error(
+    'No existe un horario seleccionado para esta conversación'
+  );
+}
 
-  await updateClientData({
-    conversationId:
-      memory.conversation_id,
+if (!memory.service_code) {
+  throw new Error(
+    'No existe un tratamiento seleccionado para esta conversación'
+  );
+}
 
-    nombre,
-    apellidos,
-    telefono,
-    email,
 
-    hasOwnPhone: true,
+// Primero guardar los datos definitivos
 
-    state:
-      'READY_TO_BOOK'
-  });
+await updateClientData({
+  conversationId:
+    memory.conversation_id,
 
-  await updateConversation({
-    conversationId:
-      memory.conversation_id,
+  nombre,
+  apellidos,
+  telefono,
+  email,
 
-    state:
-      'READY_TO_BOOK',
+  hasOwnPhone: true,
 
-    lastUserMessage:
-      message,
+  state:
+    'READY_TO_BOOK'
+});
 
-    lastChloeReply:
-      reply
-  });
 
-  return jsonResponse(200, {
-    success: true,
-    action: 'CLIENT_DATA_COMPLETE',
-    conversation_id:
-      memory.conversation_id,
-    nombre,
-    apellidos,
-    telefono,
-    email,
-    reply
-  });
+// Crear cita real
+
+const booking = await createBooking({
+
+  nombre,
+  apellidos,
+  telefono,
+  email,
+
+  serviceCode:
+    memory.service_code,
+
+  slotStart:
+    memory.selected_slot_start,
+
+  clinicCode:
+    memory.clinic_code || 'VALENCIA',
+
+  source:
+    memory.source || 'META',
+
+  campaign:
+    memory.campaign || null,
+
+  hasOwnPhone:
+    true
+});
+
+
+const reply =
+  `Perfecto, ${nombre} ✨ Tu cita ha quedado confirmada ` +
+  `para ${booking.date_label} a las ${booking.time_label}. ` +
+  `Te atenderá ${booking.specialist}. ` +
+  `Aquí tienes todos los detalles de tu experiencia: ${booking.oae_url}`;
+
+
+// Vincular conversación con cita real
+
+await finalizeBooking({
+
+  conversationId:
+    memory.conversation_id,
+
+  clienteId:
+    booking.cliente_id,
+
+  appointmentId:
+    booking.appointment_id,
+
+  publicCode:
+    booking.public_code,
+
+  reply
+});
+
+
+return jsonResponse(200, {
+
+  success: true,
+
+  action:
+    'BOOKING_CONFIRMED',
+
+  conversation_id:
+    memory.conversation_id,
+
+  cliente_id:
+    booking.cliente_id,
+
+  appointment_id:
+    booking.appointment_id,
+
+  specialist:
+    booking.specialist,
+
+  service_name:
+    booking.service_name,
+
+  date_label:
+    booking.date_label,
+
+  time_label:
+    booking.time_label,
+
+  public_code:
+    booking.public_code,
+
+  oae_url:
+    booking.oae_url,
+
+  reply
+});
 }
     // =====================================================
     // 2. SI ESTAMOS ESPERANDO ELECCIÓN DE HORARIO
