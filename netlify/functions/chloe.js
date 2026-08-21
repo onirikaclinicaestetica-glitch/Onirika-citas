@@ -173,6 +173,13 @@ async function updateClientData({
   telefono = null,
   email = null,
   hasOwnPhone = null,
+
+  referredByClienteId = null,
+  contactName = null,
+  contactPhone = null,
+  contactEmail = null,
+  relationship = null,
+
   state = null
 }) {
   return supabaseRpc(
@@ -184,11 +191,11 @@ async function updateClientData({
       p_telefono: telefono,
       p_email: email,
       p_has_own_phone: hasOwnPhone,
-      p_referred_by_cliente_id: null,
-      p_contact_name: null,
-      p_contact_phone: null,
-      p_contact_email: null,
-      p_relationship: null,
+      p_referred_by_cliente_id: referredByClienteId,
+p_contact_name: contactName,
+p_contact_phone: contactPhone,
+p_contact_email: contactEmail,
+p_relationship: relationship,
       p_state: state
     }
   );
@@ -481,6 +488,28 @@ Si escribe email, extráelo.
 Si falta un dato, devuelve null.
 
 No respondas conversacionalmente.`
+            Si la persona indica que la cita es para otra persona, detecta:
+
+booking_for_other_person = true
+
+Ejemplos:
+"Es para mi hija Lucía"
+"Quiero reservar para mi madre"
+"La cita es para mi marido"
+
+relationship debe indicar la relación desde el punto de vista del contacto:
+hija, hijo, madre, padre, pareja, esposo, esposa, familiar u otro.
+
+El campo nombre y apellidos deben corresponder SIEMPRE a la persona que recibirá el tratamiento.
+
+contact_name corresponde a la persona que está gestionando la cita, solo si lo dice explícitamente.
+
+Si no está reservando para otra persona:
+booking_for_other_person = false
+relationship = null
+contact_name = null
+
+Nunca inventes nombres, relaciones ni datos.
           },
 
           {
@@ -500,29 +529,44 @@ No respondas conversacionalmente.`
               additionalProperties: false,
 
               properties: {
-                nombre: {
-                  type: ['string', 'null']
-                },
+  nombre: {
+    type: ['string', 'null']
+  },
 
-                apellidos: {
-                  type: ['string', 'null']
-                },
+  apellidos: {
+    type: ['string', 'null']
+  },
 
-                telefono: {
-                  type: ['string', 'null']
-                },
+  telefono: {
+    type: ['string', 'null']
+  },
 
-                email: {
-                  type: ['string', 'null']
-                }
-              },
+  email: {
+    type: ['string', 'null']
+  },
 
-              required: [
-                'nombre',
-                'apellidos',
-                'telefono',
-                'email'
-              ]
+  booking_for_other_person: {
+    type: 'boolean'
+  },
+
+  relationship: {
+    type: ['string', 'null']
+  },
+
+  contact_name: {
+    type: ['string', 'null']
+  }
+},
+
+required: [
+  'nombre',
+  'apellidos',
+  'telefono',
+  'email',
+  'booking_for_other_person',
+  'relationship',
+  'contact_name'
+]
             }
           }
         }
@@ -561,9 +605,15 @@ async function createBooking({
   serviceCode,
   slotStart,
   clinicCode,
-  source,
+    source,
   campaign,
-  hasOwnPhone = true
+  hasOwnPhone = true,
+
+  referredByClienteId = null,
+  contactName = null,
+  contactPhone = null,
+  contactEmail = null,
+  relationship = null
 }) {
 
   const response = await fetch(
@@ -588,7 +638,13 @@ async function createBooking({
         source: source,
         campaign: campaign,
 
-        has_own_phone: hasOwnPhone
+        has_own_phone: hasOwnPhone,
+
+referred_by_cliente_id: referredByClienteId,
+contact_name: contactName,
+contact_phone: contactPhone,
+contact_email: contactEmail,
+relationship: relationship
       })
     }
   );
@@ -628,6 +684,31 @@ async function finalizeBooking({
       p_last_chloe_reply: reply
     }
   );
+}
+// =========================================================
+// BUSCAR CONTACTO / REFERENTE EXISTENTE
+// =========================================================
+
+async function findExistingClient({
+  nombreCompleto = null,
+  telefono = null,
+  clinicCode = 'VALENCIA'
+}) {
+
+  const result = await supabaseRpc(
+    'find_existing_client',
+    {
+      p_nombre_completo: nombreCompleto,
+      p_telefono: telefono,
+      p_clinic_code: clinicCode
+    }
+  );
+
+  if (!Array.isArray(result) || result.length === 0) {
+    return null;
+  }
+
+  return result[0];
 }
 // =========================================================
 // HANDLER PRINCIPAL CHLOE
@@ -739,7 +820,18 @@ if (
 
   const extracted =
     await interpretClientData(message);
+const bookingForOtherPerson =
+  extracted.booking_for_other_person === true;
 
+const relationship =
+  extracted.relationship ||
+  memory.relationship ||
+  null;
+
+const contactName =
+  extracted.contact_name ||
+  memory.contact_name ||
+  null;
   const nombre =
     extracted.nombre ||
     memory.nombre ||
@@ -754,7 +846,25 @@ if (
     extracted.telefono ||
     memory.telefono ||
     null;
+const hasOwnPhone =
+  bookingForOtherPerson
+    ? false
+    : (
+        memory.has_own_phone !== null &&
+        memory.has_own_phone !== undefined
+          ? memory.has_own_phone
+          : true
+      );
 
+const contactPhone =
+  bookingForOtherPerson
+    ? (
+        extracted.telefono ||
+        memory.contact_phone ||
+        memory.telefono ||
+        null
+      )
+    : null;
   const email =
     extracted.email ||
     memory.email ||
@@ -779,7 +889,11 @@ if (
       telefono,
       email,
 
-      hasOwnPhone: true,
+      hasOwnPhone,
+
+contactName,
+contactPhone,
+relationship,
 
       state:
         'AWAITING_CLIENT_DATA'
@@ -826,7 +940,11 @@ if (
       apellidos,
       email,
 
-      hasOwnPhone: true,
+      hasOwnPhone,
+
+contactName,
+contactPhone,
+relationship,,
 
       state:
         'AWAITING_PHONE'
@@ -875,7 +993,38 @@ if (!memory.service_code) {
   );
 }
 
+// -----------------------------------------
+// SI ES UN FAMILIAR, BUSCAR REFERENTE
+// EXISTENTE EN MASTER CRM
+// -----------------------------------------
 
+let referredByClienteId =
+  memory.referred_by_cliente_id || null;
+
+if (
+  hasOwnPhone === false &&
+  !referredByClienteId &&
+  (contactName || contactPhone)
+) {
+
+  const existingContact =
+    await findExistingClient({
+
+      nombreCompleto:
+        contactName || null,
+
+      telefono:
+        contactPhone || null,
+
+      clinicCode:
+        memory.clinic_code || 'VALENCIA'
+    });
+
+  if (existingContact) {
+    referredByClienteId =
+      existingContact.cliente_id;
+  }
+}
 // Primero guardar los datos definitivos
 
 await updateClientData({
@@ -887,7 +1036,11 @@ await updateClientData({
   telefono,
   email,
 
-  hasOwnPhone: true,
+ hasOwnPhone,
+referredByClienteId,
+contactName,
+contactPhone,
+relationship,
 
   state:
     'READY_TO_BOOK'
@@ -916,10 +1069,23 @@ const booking = await createBooking({
     memory.source || 'META',
 
   campaign:
-    memory.campaign || null,
+  memory.campaign || null,
 
-  hasOwnPhone:
-    true
+hasOwnPhone,
+
+referredByClienteId,
+
+contactName:
+  contactName || memory.contact_name || null,
+
+contactPhone:
+  contactPhone || memory.contact_phone || null,
+
+contactEmail:
+  memory.contact_email || null,
+
+relationship:
+  relationship || memory.relationship || null
 });
 
 
