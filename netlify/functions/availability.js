@@ -82,24 +82,19 @@ exports.handler = async (event) => {
       hour12: false
     });
 
-    const slots = rows.map(row => {
-      const start = new Date(row.slot_start);
-      const end = new Date(row.slot_end);
+   const slots = rows.map(row => {
+  const start = new Date(row.slot_start);
+  const end = new Date(row.slot_end);
 
-      return {
-        slot_start: row.slot_start,
-        slot_end: row.slot_end,
-
-        date_label: formatterDate.format(start),
-        time_label: formatterTime.format(start),
-        end_time_label: formatterTime.format(end),
-
-        available_staff_count: row.available_staff_count,
-
-        suggested_staff_id: row.suggested_staff_id,
-        suggested_specialist: row.suggested_specialist
-      };
-    });
+  return {
+    slot_start: row.slot_start,
+    slot_end: row.slot_end,
+    date_label: formatterDate.format(start),
+    time_label: formatterTime.format(start),
+    end_time_label: formatterTime.format(end)
+  };
+});
+      
 
     return {
       statusCode: 200,
