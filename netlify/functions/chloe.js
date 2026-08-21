@@ -9,6 +9,11 @@ function jsonResponse(statusCode, body) {
   };
 }
 
+
+// =========================================================
+// FECHA ACTUAL VALENCIA
+// =========================================================
+
 function getMadridToday() {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/Madrid',
@@ -28,6 +33,11 @@ function getMadridToday() {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
+
+// =========================================================
+// EXTRAER RESPUESTA OPENAI
+// =========================================================
+
 function extractOutputText(response) {
   if (!response || !Array.isArray(response.output)) {
     return null;
@@ -46,7 +56,151 @@ function extractOutputText(response) {
   return null;
 }
 
+
+// =========================================================
+// SUPABASE RPC
+// =========================================================
+
+async function supabaseRpc(functionName, payload) {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
+
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+    throw new Error('Configuración de Supabase incompleta');
+  }
+
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/rpc/${functionName}`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_SECRET_KEY,
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify(payload)
+    }
+  );
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      typeof result === 'string'
+        ? result
+        : JSON.stringify(result)
+    );
+  }
+
+  return result;
+}
+
+
+// =========================================================
+// OBTENER / CREAR MEMORIA
+// =========================================================
+
+async function getConversation({
+  externalConversationId,
+  channel,
+  clinicCode,
+  source,
+  campaign
+}) {
+
+  const result = await supabaseRpc(
+    'get_or_create_chloe_conversation',
+    {
+      p_external_conversation_id: externalConversationId,
+      p_channel: channel,
+      p_clinic_code: clinicCode,
+      p_source: source,
+      p_campaign: campaign
+    }
+  );
+
+  if (!Array.isArray(result) || result.length === 0) {
+    throw new Error('No se pudo recuperar la conversación');
+  }
+
+  return result[0];
+}
+
+
+// =========================================================
+// ACTUALIZAR MEMORIA
+// =========================================================
+
+async function updateConversation({
+  conversationId,
+  serviceCode = null,
+  appointmentType = null,
+  fromDate = null,
+  toDate = null,
+  fromTime = null,
+  toTime = null,
+  offeredSlots = null,
+  selectedSlotStart = null,
+  state = null,
+  lastUserMessage = null,
+  lastChloeReply = null
+}) {
+
+  return supabaseRpc(
+    'update_chloe_conversation',
+    {
+      p_conversation_id: conversationId,
+      p_service_code: serviceCode,
+      p_appointment_type: appointmentType,
+      p_from_date: fromDate,
+      p_to_date: toDate,
+      p_from_time: fromTime,
+      p_to_time: toTime,
+      p_offered_slots: offeredSlots,
+      p_selected_slot_start: selectedSlotStart,
+      p_state: state,
+      p_last_user_message: lastUserMessage,
+      p_last_chloe_reply: lastChloeReply
+    }
+  );
+}
+
+
+// =========================================================
+// DETECTAR ELECCIÓN DE HORARIO
+// =========================================================
+
+function findSelectedSlot(message, offeredSlots) {
+
+  if (!Array.isArray(offeredSlots)) {
+    return null;
+  }
+
+  const match = message.match(
+    /\b([01]?\d|2[0-3])(?:[:h.]([0-5]\d))?\b/
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const hour = String(match[1]).padStart(2, '0');
+  const minute = match[2] || '00';
+
+  const requestedTime = `${hour}:${minute}`;
+
+  return offeredSlots.find(
+    slot => slot.time_label === requestedTime
+  ) || null;
+}
+
+
+// =========================================================
+// INTERPRETACIÓN IA
+// =========================================================
+
 async function interpretMessage(message) {
+
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
   if (!OPENAI_API_KEY) {
@@ -55,24 +209,29 @@ async function interpretMessage(message) {
 
   const today = getMadridToday();
 
-  const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${OPENAI_API_KEY}`
-    },
+  const response = await fetch(
+    'https://api.openai.com/v1/responses',
+    {
+      method: 'POST',
 
-    body: JSON.stringify({
-      model: 'gpt-5.6-luna',
-      store: false,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`
+      },
 
-      input: [
-        {
-          role: 'system',
-          content:
-`Eres el motor de interpretación de CHLOE, recepcionista virtual de ONÍRIKA Clínica Médico-Estética en Valencia, España.
+      body: JSON.stringify({
 
-Tu única función aquí es interpretar el mensaje del cliente y devolver datos estructurados para consultar la agenda.
+        model: 'gpt-5.6-luna',
+        store: false,
+
+        input: [
+          {
+            role: 'system',
+
+            content:
+`Eres el motor de interpretación de CHLOE,
+recepcionista virtual de ONÍRIKA Clínica Médico-Estética
+en Valencia, España.
 
 FECHA ACTUAL EN VALENCIA:
 ${today}
@@ -80,148 +239,182 @@ ${today}
 ZONA HORARIA:
 Europe/Madrid
 
-SERVICIOS CONOCIDOS:
+Tu función aquí es exclusivamente interpretar intención
+y devolver datos estructurados.
 
-- ONIRIKA SCULPT360
-  service_code: SCULPT360
-  categoría: CORPORAL
-  También puede mencionarse como Sculpt360, reducción abdominal, reducir abdomen, grasa abdominal, moldear abdomen.
+SERVICIOS:
 
-- CELLULITE RESET
-  service_code: CELLULITE
-  categoría: CORPORAL
-  También puede mencionarse como celulitis, piernas con celulitis, piel de naranja.
+ONIRIKA SCULPT360
+service_code: SCULPT360
+También:
+Sculpt360,
+reducción abdominal,
+reducir abdomen,
+grasa abdominal,
+moldear abdomen.
 
-- INDIBA PORCELAIN SKIN
-  service_code: PORCELAIN
-  categoría: FACIAL
-  También puede mencionarse como Porcelain Skin, Indiba facial, luminosidad, piel luminosa.
+CELLULITE RESET
+service_code: CELLULITE
+También:
+celulitis,
+piel de naranja,
+celulitis piernas.
 
-- EXPERT JET SKIN RESET
-  service_code: EXPERT_JET
-  categoría: FACIAL
-  También puede mencionarse como Expert Jet, limpieza facial profunda, limpieza tecnológica.
+INDIBA PORCELAIN SKIN
+service_code: PORCELAIN
+También:
+Porcelain Skin,
+Indiba facial,
+luminosidad facial.
 
-- ONIRIKA LASER 3D
-  service_code: LASER3D
-  categoría: DEPILACIÓN
-  También puede mencionarse como láser, depilación láser, Laser 3D.
+EXPERT JET SKIN RESET
+service_code: EXPERT_JET
+También:
+Expert Jet,
+limpieza facial profunda,
+limpieza tecnológica.
 
-REGLAS:
+ONIRIKA LASER 3D
+service_code: LASER3D
+También:
+depilación láser,
+láser,
+Laser 3D.
 
-1. Nunca inventes una fecha si el cliente no expresa ninguna referencia temporal.
-2. Convierte referencias relativas usando la fecha actual indicada arriba.
-3. "mañana" significa el día siguiente.
-4. Un día de la semana como "el lunes" significa el próximo lunes futuro, salvo que el contexto indique otra cosa.
-5. "por la mañana":
-   from_time = 10:00
-   to_time = 14:00
+REGLAS TEMPORALES:
 
-6. "por la tarde":
-   from_time = 16:00
-   to_time = 20:00
+"por la mañana":
+10:00–14:00
 
-7. "a primera hora":
-   from_time = 10:00
-   to_time = 12:00
+"por la tarde":
+16:00–20:00
 
-8. "a última hora":
-   from_time = 18:00
-   to_time = 20:00
+"a primera hora":
+10:00–12:00
 
-9. "después de las 18":
-   from_time = 18:00
-   to_time = 20:00
+"a última hora":
+18:00–20:00
 
-10. Si indica una hora concreta, usa esa hora como from_time y to_time.
+"después de las 18":
+18:00–20:00
 
-11. Para esta fase, appointment_type será "first_visit" salvo que el mensaje diga claramente que ya es cliente y se trata de una sesión posterior, en cuyo caso usa "recurrent".
+Si indica una hora concreta,
+usa esa hora como from_time y to_time.
 
-12. Si no puedes identificar con suficiente seguridad el tratamiento, service_code debe ser null.
+"mañana" significa el día siguiente.
 
-13. Si no puedes identificar fecha, from_date y to_date deben ser null.
+Un día como "el lunes" significa
+el próximo lunes futuro.
 
-14. No inventes disponibilidad.
-15. No confirmes citas.
-16. No respondas conversacionalmente. Solo devuelve la estructura solicitada.`
-        },
+appointment_type será first_visit
+salvo que quede claro que es una sesión posterior
+de un cliente existente.
 
-        {
-          role: 'user',
-          content: message
-        }
-      ],
+No inventes fechas.
 
-      text: {
-        format: {
-          type: 'json_schema',
-          name: 'chloe_intent',
-          strict: true,
+No inventes disponibilidad.
 
-          schema: {
-            type: 'object',
-            additionalProperties: false,
+No confirmes citas.
 
-            properties: {
-              service_code: {
-                type: ['string', 'null']
+Si no identificas tratamiento:
+service_code = null.
+
+Si no identificas fecha:
+from_date = null
+to_date = null.
+
+Devuelve solamente la estructura solicitada.`
+          },
+
+          {
+            role: 'user',
+            content: message
+          }
+        ],
+
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'chloe_intent',
+            strict: true,
+
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+
+              properties: {
+
+                service_code: {
+                  type: ['string', 'null']
+                },
+
+                appointment_type: {
+                  type: 'string',
+                  enum: [
+                    'first_visit',
+                    'recurrent'
+                  ]
+                },
+
+                from_date: {
+                  type: ['string', 'null']
+                },
+
+                to_date: {
+                  type: ['string', 'null']
+                },
+
+                from_time: {
+                  type: ['string', 'null']
+                },
+
+                to_time: {
+                  type: ['string', 'null']
+                }
               },
 
-              appointment_type: {
-                type: 'string',
-                enum: ['first_visit', 'recurrent']
-              },
-
-              from_date: {
-                type: ['string', 'null']
-              },
-
-              to_date: {
-                type: ['string', 'null']
-              },
-
-              from_time: {
-                type: ['string', 'null']
-              },
-
-              to_time: {
-                type: ['string', 'null']
-              }
-            },
-
-            required: [
-              'service_code',
-              'appointment_type',
-              'from_date',
-              'to_date',
-              'from_time',
-              'to_time'
-            ]
+              required: [
+                'service_code',
+                'appointment_type',
+                'from_date',
+                'to_date',
+                'from_time',
+                'to_time'
+              ]
+            }
           }
         }
-      }
-    })
-  });
+      })
+    }
+  );
 
   const result = await response.json();
 
   if (!response.ok) {
     throw new Error(
       result?.error?.message ||
-      'Error interpretando el mensaje con OpenAI'
+      'Error interpretando mensaje'
     );
   }
 
   const text = extractOutputText(result);
 
   if (!text) {
-    throw new Error('OpenAI no devolvió interpretación');
+    throw new Error(
+      'OpenAI no devolvió interpretación'
+    );
   }
 
   return JSON.parse(text);
 }
 
+
+// =========================================================
+// HANDLER PRINCIPAL CHLOE
+// =========================================================
+
 exports.handler = async (event) => {
+
   if (event.httpMethod !== 'POST') {
     return jsonResponse(405, {
       success: false,
@@ -240,140 +433,347 @@ exports.handler = async (event) => {
     });
   }
 
+
   const message =
     typeof data.message === 'string'
       ? data.message.trim()
       : '';
 
+
   if (!message) {
     return jsonResponse(400, {
       success: false,
-      error: 'Falta el mensaje del cliente'
+      error: 'Falta el mensaje'
     });
   }
 
-  try {
-    /*
-     * Si algún dato llega explícitamente desde otro canal,
-     * lo conservamos.
-     * La IA completa lo que falta.
-     */
 
-    const ai = await interpretMessage(message);
+  const externalConversationId =
+    data.external_conversation_id;
+
+  if (!externalConversationId) {
+    return jsonResponse(400, {
+      success: false,
+      error: 'Falta external_conversation_id'
+    });
+  }
+
+
+  const channel =
+    data.channel || 'web';
+
+  const clinicCode =
+    data.clinic_code || 'VALENCIA';
+
+  const source =
+    data.source || 'META';
+
+  const campaign =
+    data.campaign || null;
+
+
+  try {
+
+    // =====================================================
+    // 1. RECUPERAR MEMORIA
+    // =====================================================
+
+    const memory = await getConversation({
+      externalConversationId,
+      channel,
+      clinicCode,
+      source,
+      campaign
+    });
+
+
+    // =====================================================
+    // 2. SI ESTAMOS ESPERANDO ELECCIÓN DE HORARIO
+    // =====================================================
+
+    if (
+      memory.state === 'OFFERING_SLOTS' &&
+      Array.isArray(memory.offered_slots)
+    ) {
+
+      const selected =
+        findSelectedSlot(
+          message,
+          memory.offered_slots
+        );
+
+
+      if (selected) {
+
+        const reply =
+          `Perfecto ✨ He seleccionado las ${selected.time_label}. ` +
+          `Para preparar tu reserva, ¿me indicas tu nombre y apellidos?`;
+
+
+        await updateConversation({
+
+          conversationId:
+            memory.conversation_id,
+
+          selectedSlotStart:
+            selected.slot_start,
+
+          state:
+            'AWAITING_CLIENT_DATA',
+
+          lastUserMessage:
+            message,
+
+          lastChloeReply:
+            reply
+        });
+
+
+        return jsonResponse(200, {
+
+          success: true,
+
+          action:
+            'SLOT_SELECTED',
+
+          conversation_id:
+            memory.conversation_id,
+
+          service_code:
+            memory.service_code,
+
+          selected_slot:
+            selected,
+
+          reply
+        });
+      }
+    }
+
+
+    // =====================================================
+    // 3. INTERPRETAR MENSAJE
+    // =====================================================
+
+    const ai =
+      await interpretMessage(message);
+
+
+    // MEMORIA TIENE PRIORIDAD CUANDO IA NO TRAE DATO
 
     const serviceCode =
       data.service_code ||
       ai.service_code ||
+      memory.service_code ||
       null;
+
 
     const appointmentType =
       data.appointment_type ||
       ai.appointment_type ||
+      memory.appointment_type ||
       'first_visit';
 
-    const clinicCode =
-      data.clinic_code ||
-      'VALENCIA';
 
     const fromDate =
       data.from_date ||
       ai.from_date ||
+      memory.from_date ||
       null;
+
 
     const toDate =
       data.to_date ||
       ai.to_date ||
+      memory.to_date ||
       null;
+
 
     const fromTime =
       data.from_time ||
       ai.from_time ||
+      memory.from_time ||
       null;
+
 
     const toTime =
       data.to_time ||
       ai.to_time ||
+      memory.to_time ||
       null;
+
 
     const maxResults =
       Number(data.max_results || 3);
 
 
-    // ==========================================
-    // FALTA TRATAMIENTO
-    // ==========================================
+    // =====================================================
+    // FALTA SERVICIO
+    // =====================================================
 
     if (!serviceCode) {
-      return jsonResponse(200, {
-        success: true,
-        action: 'NEED_SERVICE',
-        interpreted: ai,
 
-        reply:
-          'Claro ✨ ¿Qué tratamiento o qué te gustaría mejorar?'
+      const reply =
+        'Claro ✨ ¿Qué tratamiento o qué te gustaría mejorar?';
+
+
+      await updateConversation({
+
+        conversationId:
+          memory.conversation_id,
+
+        state:
+          'NEED_SERVICE',
+
+        lastUserMessage:
+          message,
+
+        lastChloeReply:
+          reply
+      });
+
+
+      return jsonResponse(200, {
+
+        success: true,
+
+        action:
+          'NEED_SERVICE',
+
+        conversation_id:
+          memory.conversation_id,
+
+        reply
       });
     }
 
 
-    // ==========================================
+    // =====================================================
     // FALTA FECHA
-    // ==========================================
+    // =====================================================
 
     if (!fromDate || !toDate) {
-      return jsonResponse(200, {
-        success: true,
-        action: 'NEED_DATE',
-        service_code: serviceCode,
-        interpreted: ai,
 
-        reply:
-          'Perfecto ✨ ¿Qué día te vendría mejor para tu visita?'
+      const reply =
+        'Perfecto ✨ ¿Qué día te vendría mejor para tu visita?';
+
+
+      await updateConversation({
+
+        conversationId:
+          memory.conversation_id,
+
+        serviceCode,
+
+        appointmentType,
+
+        state:
+          'NEED_DATE',
+
+        lastUserMessage:
+          message,
+
+        lastChloeReply:
+          reply
+      });
+
+
+      return jsonResponse(200, {
+
+        success: true,
+
+        action:
+          'NEED_DATE',
+
+        conversation_id:
+          memory.conversation_id,
+
+        service_code:
+          serviceCode,
+
+        reply
       });
     }
 
 
-    // ==========================================
-    // CONSULTAR MASTER CRM
-    // ==========================================
+    // =====================================================
+    // 4. CONSULTAR DISPONIBILIDAD REAL
+    // =====================================================
 
-    const params = new URLSearchParams({
-      service: serviceCode,
-      from: fromDate,
-      to: toDate,
-      appointment_type: appointmentType,
-      clinic: clinicCode,
-      max_results: String(maxResults)
-    });
+    const params =
+      new URLSearchParams({
+
+        service:
+          serviceCode,
+
+        from:
+          fromDate,
+
+        to:
+          toDate,
+
+        appointment_type:
+          appointmentType,
+
+        clinic:
+          clinicCode,
+
+        max_results:
+          String(maxResults)
+      });
+
 
     if (fromTime) {
-      params.set('time_from', fromTime);
+      params.set(
+        'time_from',
+        fromTime
+      );
     }
 
+
     if (toTime) {
-      params.set('time_to', toTime);
+      params.set(
+        'time_to',
+        toTime
+      );
     }
+
 
     const availabilityUrl =
       `https://citas.onirikaclinicaestetica.com/.netlify/functions/availability?${params.toString()}`;
 
+
     const availabilityResponse =
-      await fetch(availabilityUrl, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json'
+      await fetch(
+        availabilityUrl,
+        {
+          method: 'GET',
+          headers: {
+            Accept:
+              'application/json'
+          }
         }
-      });
+      );
+
 
     const availability =
       await availabilityResponse.json();
 
+
     if (!availabilityResponse.ok) {
+
       return jsonResponse(502, {
+
         success: false,
-        error: 'No se pudo consultar disponibilidad',
-        detail: availability
+
+        error:
+          'No se pudo consultar disponibilidad',
+
+        detail:
+          availability
       });
     }
+
 
     const slots =
       Array.isArray(availability.slots)
@@ -381,58 +781,150 @@ exports.handler = async (event) => {
         : [];
 
 
-    // ==========================================
+    // =====================================================
     // SIN DISPONIBILIDAD
-    // ==========================================
+    // =====================================================
 
     if (slots.length === 0) {
+
+      const reply =
+        'En esa franja no tengo disponibilidad. ' +
+        'Puedo buscarte otro horario o un día cercano ✨';
+
+
+      await updateConversation({
+
+        conversationId:
+          memory.conversation_id,
+
+        serviceCode,
+
+        appointmentType,
+
+        fromDate,
+
+        toDate,
+
+        fromTime,
+
+        toTime,
+
+        state:
+          'NO_AVAILABILITY',
+
+        lastUserMessage:
+          message,
+
+        lastChloeReply:
+          reply
+      });
+
+
       return jsonResponse(200, {
+
         success: true,
-        action: 'NO_AVAILABILITY',
 
-        service_code: serviceCode,
-        appointment_type: appointmentType,
+        action:
+          'NO_AVAILABILITY',
 
-        interpreted: ai,
+        conversation_id:
+          memory.conversation_id,
+
         slots: [],
 
-        reply:
-          'En esa franja no tengo disponibilidad. Puedo buscarte otro horario o un día cercano ✨'
+        reply
       });
     }
 
 
-    // ==========================================
-    // FORMATEAR RESPUESTA PARA CHLOE
-    // ==========================================
+    // =====================================================
+    // 5. OFRECER HORARIOS
+    // =====================================================
 
-    const optionText = slots
-      .map(slot => slot.time_label)
-      .join(', ');
+    const optionText =
+      slots
+        .map(slot => slot.time_label)
+        .join(', ');
+
 
     const firstDate =
-      slots[0]?.date_label || 'ese día';
+      slots[0]?.date_label ||
+      'ese día';
 
-    return jsonResponse(200, {
-      success: true,
-      action: 'OFFER_SLOTS',
 
-      service_code: serviceCode,
-      appointment_type: appointmentType,
-      clinic_code: clinicCode,
+    const reply =
+      `Perfecto ✨ Para ${firstDate} tengo disponibilidad ` +
+      `a las ${optionText}. ¿Cuál de estos horarios te viene mejor?`;
 
-      interpreted: ai,
-      slots,
 
-      reply:
-        `Perfecto ✨ Para ${firstDate} tengo disponibilidad a las ${optionText}. ¿Cuál de estos horarios te viene mejor?`
+    // =====================================================
+    // 6. GUARDAR TODO EN MEMORIA
+    // =====================================================
+
+    await updateConversation({
+
+      conversationId:
+        memory.conversation_id,
+
+      serviceCode,
+
+      appointmentType,
+
+      fromDate,
+
+      toDate,
+
+      fromTime,
+
+      toTime,
+
+      offeredSlots:
+        slots,
+
+      state:
+        'OFFERING_SLOTS',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
     });
 
+
+    return jsonResponse(200, {
+
+      success: true,
+
+      action:
+        'OFFER_SLOTS',
+
+      conversation_id:
+        memory.conversation_id,
+
+      service_code:
+        serviceCode,
+
+      appointment_type:
+        appointmentType,
+
+      slots,
+
+      reply
+    });
+
+
   } catch (e) {
+
     return jsonResponse(500, {
+
       success: false,
-      error: 'Error interno de CHLOE',
-      detail: e.message
+
+      error:
+        'Error interno de CHLOE',
+
+      detail:
+        e.message
     });
   }
 };
