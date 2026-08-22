@@ -766,6 +766,11 @@ Devuelve únicamente una de estas intenciones:
 
 RESCHEDULE
 CANCEL
+CHECK_DATE
+CHECK_TIME
+CHECK_SPECIALIST
+CHECK_SERVICE
+CHECK_LINK
 CHECK_APPOINTMENT
 OTHER
 
@@ -780,9 +785,29 @@ Ejemplos:
 "No podré ir"
 => CANCEL
 
-"¿A qué hora tengo la cita?"
+"¿Qué día tengo la cita?"
 "¿Cuándo era mi cita?"
+=> CHECK_DATE
+
+"¿A qué hora tengo la cita?"
+"¿Qué hora era?"
+=> CHECK_TIME
+
+"¿Con quién tengo la cita?"
+"¿Quién me atenderá?"
+=> CHECK_SPECIALIST
+
+"¿Qué tratamiento tengo?"
+"¿Qué me van a hacer?"
+=> CHECK_SERVICE
+
+"Pásame el enlace"
+"Quiero ver los detalles"
+"¿Dónde veo mi cita?"
+=> CHECK_LINK
+
 "Recuérdame mi cita"
+"Dame todos los detalles de mi cita"
 => CHECK_APPOINTMENT
 
 "Gracias"
@@ -813,11 +838,16 @@ No inventes información.`
                 intent: {
                   type: 'string',
                   enum: [
-                    'RESCHEDULE',
-                    'CANCEL',
-                    'CHECK_APPOINTMENT',
-                    'OTHER'
-                  ]
+  'RESCHEDULE',
+  'CANCEL',
+  'CHECK_DATE',
+  'CHECK_TIME',
+  'CHECK_SPECIALIST',
+  'CHECK_SERVICE',
+  'CHECK_LINK',
+  'CHECK_APPOINTMENT',
+  'OTHER'
+]
                 }
               },
 
@@ -1205,7 +1235,16 @@ if (bookedIntent.intent === 'CANCEL') {
 // CONSULTAR CITA CONFIRMADA
 // =====================================================
 
-if (bookedIntent.intent === 'CHECK_APPOINTMENT') {
+if (
+  [
+    'CHECK_DATE',
+    'CHECK_TIME',
+    'CHECK_SPECIALIST',
+    'CHECK_SERVICE',
+    'CHECK_LINK',
+    'CHECK_APPOINTMENT'
+  ].includes(bookedIntent.intent)
+) {
 
   if (!memory.booked_appointment_id) {
     throw new Error(
@@ -1220,8 +1259,7 @@ if (bookedIntent.intent === 'CHECK_APPOINTMENT') {
         memory.booked_appointment_id,
 
       p_clinic_code:
-        memory.clinic_code ||
-        'VALENCIA'
+        memory.clinic_code || 'VALENCIA'
     }
   );
 
@@ -1234,27 +1272,20 @@ if (bookedIntent.intent === 'CHECK_APPOINTMENT') {
     );
   }
 
-  const details =
-    detailsResult[0];
+  const details = detailsResult[0];
 
-  const date = new Date(
-    details.starts_at
-  );
+  const date =
+    new Date(details.starts_at);
 
   const dateLabel =
     new Intl.DateTimeFormat(
       'es-ES',
       {
-        timeZone:
-          'Europe/Madrid',
-        weekday:
-          'long',
-        day:
-          'numeric',
-        month:
-          'long',
-        year:
-          'numeric'
+        timeZone: 'Europe/Madrid',
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
       }
     ).format(date);
 
@@ -1262,14 +1293,10 @@ if (bookedIntent.intent === 'CHECK_APPOINTMENT') {
     new Intl.DateTimeFormat(
       'es-ES',
       {
-        timeZone:
-          'Europe/Madrid',
-        hour:
-          '2-digit',
-        minute:
-          '2-digit',
-        hour12:
-          false
+        timeZone: 'Europe/Madrid',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
       }
     ).format(date);
 
@@ -1278,11 +1305,47 @@ if (bookedIntent.intent === 'CHECK_APPOINTMENT') {
       ? `https://citas.onirikaclinicaestetica.com/?id=${memory.public_code}`
       : null;
 
-  const reply =
-    `Claro ✨ Tu cita es el ${dateLabel} a las ${timeLabel}, ` +
-    `para ${details.service_name}` +
-    `${details.especialista ? ` con ${details.especialista}` : ''}. ` +
-    `Te dejo también todos los detalles de tu experiencia.`;
+  let reply;
+
+  switch (bookedIntent.intent) {
+
+    case 'CHECK_DATE':
+      reply =
+        `Tu cita es el ${dateLabel} ✨`;
+      break;
+
+    case 'CHECK_TIME':
+      reply =
+        `Tu cita es a las ${timeLabel} ✨`;
+      break;
+
+    case 'CHECK_SPECIALIST':
+      reply =
+        details.especialista
+          ? `Te atenderá ${details.especialista} ✨`
+          : 'Tu cita está confirmada ✨';
+      break;
+
+    case 'CHECK_SERVICE':
+      reply =
+        `Tienes reservado ${details.service_name} ✨`;
+      break;
+
+    case 'CHECK_LINK':
+      reply =
+        oaeUrl
+          ? `Claro ✨ Aquí tienes todos los detalles de tu experiencia: ${oaeUrl}`
+          : 'Tu cita está confirmada ✨';
+      break;
+
+    case 'CHECK_APPOINTMENT':
+    default:
+      reply =
+        `Claro ✨ Tu cita es el ${dateLabel} a las ${timeLabel}, ` +
+        `para ${details.service_name}` +
+        `${details.especialista ? ` con ${details.especialista}` : ''}.`;
+      break;
+  }
 
   await updateConversation({
     conversationId:
@@ -1300,44 +1363,21 @@ if (bookedIntent.intent === 'CHECK_APPOINTMENT') {
 
   return jsonResponse(200, {
     success: true,
-
-    action:
-      'APPOINTMENT_DETAILS',
-
-    conversation_id:
-      memory.conversation_id,
-
-    appointment_id:
-      details.appointment_id,
-
-    service_code:
-      details.service_code,
-
-    service_name:
-      details.service_name,
-
-    specialist:
-      details.especialista,
-
-    starts_at:
-      details.starts_at,
-
-    ends_at:
-      details.ends_at,
-
-    status:
-      details.status,
-
-    public_code:
-      memory.public_code,
-
-    oae_url:
-      oaeUrl,
-
+    action: 'APPOINTMENT_DETAILS',
+    detail_type: bookedIntent.intent,
+    conversation_id: memory.conversation_id,
+    appointment_id: details.appointment_id,
+    service_code: details.service_code,
+    service_name: details.service_name,
+    specialist: details.especialista,
+    starts_at: details.starts_at,
+    ends_at: details.ends_at,
+    status: details.status,
+    public_code: memory.public_code,
+    oae_url: oaeUrl,
     reply
   });
 }
-  }
 // =========================================================
 // CANCELACIÓN — ESPERANDO CONFIRMACIÓN
 // =========================================================
