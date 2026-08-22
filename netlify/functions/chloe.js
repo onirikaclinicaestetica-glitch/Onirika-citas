@@ -1493,6 +1493,244 @@ if (
   });
 }
     // =========================================================
+// CITA CANCELADA — RECUPERAR NUEVA RESERVA
+// =========================================================
+
+if (memory.state === 'CANCELLED') {
+
+  const normalized =
+    String(message || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  const wantsNewBooking =
+    normalized.includes('reserv') ||
+    normalized.includes('agend') ||
+    normalized.includes('otra cita') ||
+    normalized.includes('nueva cita') ||
+    normalized.includes('volver a ir') ||
+    normalized.includes('quiero cita');
+
+  if (wantsNewBooking) {
+
+    const reply =
+      'Claro ✨ Podemos reservar una nueva cita. ¿Qué día u horario te vendría mejor?';
+
+    await updateConversation({
+      conversationId: memory.conversation_id,
+      state: 'AWAITING_REBOOK_PREFERENCE',
+      lastUserMessage: message,
+      lastChloeReply: reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NEED_REBOOK_PREFERENCE',
+      conversation_id: memory.conversation_id,
+      service_code: memory.service_code,
+      reply
+    });
+  }
+
+  const reply =
+    'Tu cita anterior está cancelada ✨ Si quieres, puedo ayudarte a reservar una nueva.';
+
+  await updateConversation({
+    conversationId: memory.conversation_id,
+    state: 'CANCELLED',
+    lastUserMessage: message,
+    lastChloeReply: reply
+  });
+
+  return jsonResponse(200, {
+    success: true,
+    action: 'CANCELLED_APPOINTMENT',
+    conversation_id: memory.conversation_id,
+    reply
+  });
+}
+// =========================================================
+// NUEVA RESERVA TRAS CANCELACIÓN — BUSCAR HORARIOS
+// =========================================================
+
+if (memory.state === 'AWAITING_REBOOK_PREFERENCE') {
+
+  const ai =
+    await interpretMessage(message);
+
+  const serviceCode =
+    ai.service_code ||
+    memory.service_code;
+
+  const appointmentType =
+    ai.appointment_type ||
+    'first_visit';
+
+  const fromDate =
+    ai.from_date ||
+    memory.from_date;
+
+  const toDate =
+    ai.to_date ||
+    memory.to_date;
+
+  const fromTime =
+    ai.from_time ||
+    memory.from_time ||
+    null;
+
+  const toTime =
+    ai.to_time ||
+    memory.to_time ||
+    null;
+
+  if (!serviceCode) {
+
+    const reply =
+      'Claro ✨ ¿Qué tratamiento te gustaría reservar?';
+
+    await updateConversation({
+      conversationId: memory.conversation_id,
+      state: 'AWAITING_REBOOK_PREFERENCE',
+      lastUserMessage: message,
+      lastChloeReply: reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NEED_REBOOK_SERVICE',
+      conversation_id: memory.conversation_id,
+      reply
+    });
+  }
+
+  if (!fromDate) {
+
+    const reply =
+      'Perfecto ✨ ¿Qué día te vendría mejor?';
+
+    await updateConversation({
+      conversationId: memory.conversation_id,
+      serviceCode,
+      state: 'AWAITING_REBOOK_PREFERENCE',
+      lastUserMessage: message,
+      lastChloeReply: reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NEED_REBOOK_DATE',
+      conversation_id: memory.conversation_id,
+      service_code: serviceCode,
+      reply
+    });
+  }
+
+  const params =
+    new URLSearchParams({
+      service: serviceCode,
+      from: fromDate,
+      to: toDate || fromDate,
+      appointment_type: appointmentType,
+      clinic: memory.clinic_code || 'VALENCIA',
+      max_results: '3'
+    });
+
+  if (fromTime) {
+    params.set('time_from', fromTime);
+  }
+
+  if (toTime) {
+    params.set('time_to', toTime);
+  }
+
+  const availabilityUrl =
+    `https://citas.onirikaclinicaestetica.com/.netlify/functions/availability?${params.toString()}`;
+
+  const availabilityResponse =
+    await fetch(
+      availabilityUrl,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json'
+        }
+      }
+    );
+
+  const availability =
+    await availabilityResponse.json();
+
+  if (!availabilityResponse.ok) {
+    return jsonResponse(502, {
+      success: false,
+      error: 'No se pudo consultar disponibilidad',
+      detail: availability
+    });
+  }
+
+  const slots =
+    Array.isArray(availability.slots)
+      ? availability.slots
+      : [];
+
+  if (slots.length === 0) {
+
+    const reply =
+      'En esa franja no tengo disponibilidad. Puedo buscarte otro horario o un día cercano ✨';
+
+    await updateConversation({
+      conversationId: memory.conversation_id,
+      serviceCode,
+      appointmentType,
+      fromDate,
+      toDate: toDate || fromDate,
+      fromTime,
+      toTime,
+      state: 'AWAITING_REBOOK_PREFERENCE',
+      lastUserMessage: message,
+      lastChloeReply: reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NO_REBOOK_SLOTS',
+      conversation_id: memory.conversation_id,
+      service_code: serviceCode,
+      reply
+    });
+  }
+
+  const reply =
+    `Perfecto ✨ Tengo estas opciones disponibles. ¿Cuál te viene mejor?`;
+
+  await updateConversation({
+    conversationId: memory.conversation_id,
+    serviceCode,
+    appointmentType,
+    fromDate,
+    toDate: toDate || fromDate,
+    fromTime,
+    toTime,
+    offeredSlots: slots,
+    state: 'OFFERING_REBOOK_SLOTS',
+    lastUserMessage: message,
+    lastChloeReply: reply
+  });
+
+  return jsonResponse(200, {
+    success: true,
+    action: 'OFFER_REBOOK_SLOTS',
+    conversation_id: memory.conversation_id,
+    service_code: serviceCode,
+    appointment_type: appointmentType,
+    slots,
+    reply
+  });
+}
+    // =========================================================
 // REPROGRAMACIÓN — BUSCAR NUEVOS HORARIOS
 // =========================================================
 
@@ -2270,6 +2508,195 @@ if (
 
     oae_url:
       oaeUrl,
+
+    reply
+  });
+}
+   // =========================================================
+// REBOOK — ELEGIR HORARIO Y CREAR NUEVA CITA
+// =========================================================
+
+if (
+  memory.state === 'OFFERING_REBOOK_SLOTS' &&
+  Array.isArray(memory.offered_slots)
+) {
+
+  const selected =
+    findSelectedSlot(
+      message,
+      memory.offered_slots
+    );
+
+  if (!selected) {
+
+    const reply =
+      'No he podido identificar cuál horario prefieres ✨ ¿Me indicas la opción o la hora que quieres?';
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NEED_REBOOK_SLOT_SELECTION',
+      conversation_id: memory.conversation_id,
+      slots: memory.offered_slots,
+      reply
+    });
+  }
+
+  // -------------------------------------------------------
+  // Verificar que ya tenemos los datos de la clienta
+  // -------------------------------------------------------
+
+  if (!memory.nombre) {
+
+    const reply =
+      'Perfecto ✨ Antes de reservar, ¿me recuerdas tu nombre y apellidos?';
+
+    await updateConversation({
+      conversationId: memory.conversation_id,
+      selectedSlotStart: selected.slot_start,
+      state: 'AWAITING_CLIENT_DATA',
+      lastUserMessage: message,
+      lastChloeReply: reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NEED_CLIENT_DATA',
+      conversation_id: memory.conversation_id,
+      reply
+    });
+  }
+
+
+  // -------------------------------------------------------
+  // Guardar el nuevo horario seleccionado
+  // -------------------------------------------------------
+
+  await updateConversation({
+    conversationId: memory.conversation_id,
+    selectedSlotStart: selected.slot_start,
+    state: 'READY_TO_BOOK',
+    lastUserMessage: message
+  });
+
+
+  // -------------------------------------------------------
+  // Crear una NUEVA cita
+  // La cita anterior permanece cancelada
+  // -------------------------------------------------------
+
+  const booking =
+    await createBooking({
+
+      nombre:
+        memory.nombre,
+
+      apellidos:
+        memory.apellidos || null,
+
+      telefono:
+        memory.telefono || null,
+
+      email:
+        memory.email || null,
+
+      serviceCode:
+        memory.service_code,
+
+      slotStart:
+        selected.slot_start,
+
+      clinicCode:
+        memory.clinic_code || 'VALENCIA',
+
+      source:
+        memory.source || 'META',
+
+      campaign:
+        memory.campaign || null,
+
+      hasOwnPhone:
+        memory.has_own_phone ?? true,
+
+      referredByClienteId:
+        memory.referred_by_cliente_id || null,
+
+      contactName:
+        memory.contact_name || null,
+
+      contactPhone:
+        memory.contact_phone || null,
+
+      contactEmail:
+        memory.contact_email || null,
+
+      relationship:
+        memory.relationship || null
+    });
+
+
+  const reply =
+    `Perfecto, ${memory.nombre} ✨ Tu nueva cita ha quedado confirmada ` +
+    `para ${booking.date_label} a las ${booking.time_label}. ` +
+    `Te atenderá ${booking.specialist}. ` +
+    `Aquí tienes todos los detalles de tu experiencia: ${booking.oae_url}`;
+
+
+  // -------------------------------------------------------
+  // Vincular la conversación con la NUEVA cita
+  // -------------------------------------------------------
+
+  await finalizeBooking({
+    conversationId:
+      memory.conversation_id,
+
+    clienteId:
+      booking.cliente_id,
+
+    appointmentId:
+      booking.appointment_id,
+
+    publicCode:
+      booking.public_code,
+
+    reply
+  });
+
+
+  return jsonResponse(200, {
+    success: true,
+
+    action:
+      'REBOOKING_CONFIRMED',
+
+    conversation_id:
+      memory.conversation_id,
+
+    previous_appointment_id:
+      memory.booked_appointment_id,
+
+    appointment_id:
+      booking.appointment_id,
+
+    cliente_id:
+      booking.cliente_id,
+
+    specialist:
+      booking.specialist,
+
+    service_name:
+      booking.service_name,
+
+    date_label:
+      booking.date_label,
+
+    time_label:
+      booking.time_label,
+
+    public_code:
+      booking.public_code,
+
+    oae_url:
+      booking.oae_url,
 
     reply
   });
