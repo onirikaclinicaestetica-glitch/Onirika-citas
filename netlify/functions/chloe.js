@@ -1337,6 +1337,7 @@ if (bookedIntent.intent === 'CHECK_APPOINTMENT') {
     reply
   });
 }
+  }
 // =========================================================
 // CANCELACIÓN — ESPERANDO CONFIRMACIÓN
 // =========================================================
