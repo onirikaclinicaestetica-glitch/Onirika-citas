@@ -1703,8 +1703,19 @@ if (memory.state === 'AWAITING_REBOOK_PREFERENCE') {
     });
   }
 
-  const reply =
-    `Perfecto ✨ Tengo estas opciones disponibles. ¿Cuál te viene mejor?`;
+ const slotLabels =
+  slots
+    .map((slot, index) => {
+      return `${index + 1}. ${slot.date_label} a las ${slot.time_label}`;
+    })
+    .join('\n');
+
+const reply =
+  `Perfecto ✨ Tengo estas opciones disponibles:
+
+${slotLabels}
+
+¿Cuál te viene mejor?`;
 
   await updateConversation({
     conversationId: memory.conversation_id,
