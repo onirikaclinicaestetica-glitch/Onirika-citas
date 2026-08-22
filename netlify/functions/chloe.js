@@ -3133,20 +3133,30 @@ if (asksForInfo && !wantsToBook && serviceCode) {
     // 5. OFRECER HORARIOS
     // =====================================================
 
-    const optionText =
-      slots
-        .map(slot => slot.time_label)
-        .join(', ');
+   const optionText =
+  slots
+    .map(slot => slot.time_label)
+    .filter(Boolean)
+    .join(', ');
 
+const firstDate =
+  slots[0]?.date_label ||
+  'ese día';
 
-    const firstDate =
-      slots[0]?.date_label ||
-      'ese día';
+let reply;
 
+if (slots.length === 1) {
 
-    const reply =
-      `Perfecto ✨ Para ${firstDate} tengo disponibilidad ` +
-      `a las ${optionText}. ¿Cuál de estos horarios te viene mejor?`;
+  reply =
+    `Perfecto ✨ Para ${firstDate} tengo disponibilidad a las ${slots[0].time_label}. ` +
+    `¿Te viene bien ese horario?`;
+
+} else {
+
+  reply =
+    `Perfecto ✨ Para ${firstDate} tengo disponibilidad a las ${optionText}. ` +
+    `¿Cuál de estos horarios te viene mejor?`;
+}
 
 
     // =====================================================
