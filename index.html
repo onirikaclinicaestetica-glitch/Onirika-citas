@@ -283,7 +283,19 @@ function svgAbstract(){return `<svg class="abstract-art" viewBox="0 0 365 470" a
 <circle cx="298" cy="76" r="2.2"/><circle cx="215" cy="151" r="1.7"/><circle cx="249" cy="195" r="1.5"/><circle cx="139" cy="245" r="1.8"/><circle cx="111" cy="313" r="1.5"/>
 </svg>`}
 function clientHTML(d,withToolbar=false){const ins=(d.instructions||'').split('|').filter(Boolean);const id=esc(d.id);const reMsg=encodeURIComponent(`Hola, me gustaría reprogramar mi cita en ONÍRIKA del ${longDate(d.date)} a las ${d.time}. ¿Podéis ayudarme, por favor?`);const caMsg=encodeURIComponent(`Hola, necesito cancelar mi cita en ONÍRIKA del ${longDate(d.date)} a las ${d.time}. Gracias.`);return `${withToolbar?'<div class="client-toolbar"><a href="'+location.pathname+'">← Volver al generador</a></div>':''}<div class="preview-wrap">
-<section class="hero">${svgAbstract()}<div class="hero-inner"><div class="brand">ONÍRIKA</div><div class="brand-sub">CLÍNICA MÉDICO-ESTÉTICA <span>·</span> VALENCIA</div><h2>Tu experiencia<br>está confirmada</h2><div class="goldline"></div><div class="hello">Hola, ${esc(firstName(d.name))}</div><p class="thanks">Gracias por confiar en nosotros.<br>Estamos deseando acompañarte en tu experiencia.</p></div></section>
+<section class="hero">${svgAbstract()}<div class="hero-inner"><div class="brand">ONÍRIKA</div><div class="brand-sub">CLÍNICA MÉDICO-ESTÉTICA <span>·</span> VALENCIA</div><h2>
+  ${
+    d.experience_type === 'PROGRAM_SESSION'
+      ? 'Tu próxima sesión<br>está confirmada'
+      : 'Tu experiencia<br>está confirmada'
+  }
+</h2><div class="goldline"></div><div class="hello">Hola, ${esc(firstName(d.name))}</div><p class="thanks">
+  ${
+    d.experience_type === 'PROGRAM_SESSION'
+      ? 'Seguimos avanzando contigo en tu experiencia ONÍRIKA.<br>Cada sesión es un paso más hacia tu objetivo.'
+      : 'Gracias por confiar en nosotros.<br>Estamos deseando acompañarte en tu experiencia.'
+  }
+</p></div></section>
 <div class="body">
 <div class="card"> <div class="appt-row"><div class="label">Fecha</div><div class="value">${esc(longDate(d.date))}</div></div><div class="appt-row"><div class="label">Hora</div><div class="value">${esc(d.time)}</div></div><div class="appt-row"><div class="label">Tratamiento</div><div class="value">${esc(d.treatment)}${treatmentCategory(d.treatment)?`<div class="subvalue">${esc(treatmentCategory(d.treatment))}</div>`:''}</div></div><div class="appt-row"><div class="label">Profesional</div><div class="value">con ${esc(d.professional)}</div></div><div class="appt-row"><div class="label">Duración</div><div class="value">${esc(d.duration)}</div></div></div>
 
