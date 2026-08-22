@@ -22,16 +22,24 @@ exports.handler = async (event) => {
 
   try {
     const url =
-      `${SUPABASE_URL}/rest/v1/appointment_experiences` +
-      `?public_code=eq.${encodeURIComponent(id)}` +
-      `&select=` +
-      `id,public_code,precare,` +
-      `appointments(` +
-        `id,starts_at,ends_at,status,` +
-        `clientes(nombre,apellidos),` +
-        `services(name,category,duration_minutes),` +
-        `staff(first_name)` +
-      `)`;
+  `${SUPABASE_URL}/rest/v1/appointment_experiences` +
+  `?public_code=eq.${encodeURIComponent(id)}` +
+  `&select=` +
+  `id,public_code,precare,` +
+  `experience_type,` +
+  `client_program_id,` +
+  `program_session_id,` +
+  `program_session_number,` +
+  `program_total_sessions,` +
+  `client_programs(` +
+    `id,program_code,program_name,total_sessions,used_sessions,remaining_sessions,status` +
+  `),` +
+  `appointments(` +
+    `id,starts_at,ends_at,status,appointment_type,` +
+    `clientes(nombre,apellidos),` +
+    `services(name,category,duration_minutes,first_visit_duration_minutes),` +
+    `staff(first_name)` +
+  `)`;
 
     const response = await fetch(url, {
       headers: {
@@ -77,7 +85,7 @@ exports.handler = async (event) => {
     const cliente = appointment.clientes || {};
     const service = appointment.services || {};
     const staff = appointment.staff || {};
-
+const program = oae.client_programs || {};
     const start = new Date(appointment.starts_at);
 
     const dateFormatter = new Intl.DateTimeFormat('en-CA', {
@@ -116,11 +124,51 @@ exports.handler = async (event) => {
         time: timeFormatter.format(start),
         treatment: service.name || '',
         professional: staff.first_name || '',
-        duration: service.duration_minutes
-          ? `${service.duration_minutes} minutos`
-          : '',
+        duration:
+  appointment.appointment_type === 'first_visit'
+    ? (
+        service.first_visit_duration_minutes ||
+        service.duration_minutes
+      )
+      ? `${
+          service.first_visit_duration_minutes ||
+          service.duration_minutes
+        } minutos`
+      : ''
+    : service.duration_minutes
+      ? `${service.duration_minutes} minutos`
+      : '',
         instructions,
         category: service.category || '',
+        experience_type:
+  oae.experience_type || 'FIRST_VISIT',
+
+client_program_id:
+  oae.client_program_id || null,
+
+program_session_id:
+  oae.program_session_id || null,
+
+program_session_number:
+  oae.program_session_number || null,
+
+program_total_sessions:
+  oae.program_total_sessions || null,
+
+program_code:
+  program.program_code || null,
+
+program_name:
+  program.program_name || null,
+
+program_used_sessions:
+  program.used_sessions ?? null,
+
+program_remaining_sessions:
+  program.remaining_sessions ?? null,
+
+program_status:
+  program.status || null,
         source: 'master_crm'
       })
     };
