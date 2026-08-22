@@ -731,6 +731,23 @@ async function findExistingClient({
   return result[0];
 }
 // =========================================================
+// VINCULAR CONVERSACIÓN CHLOE CON CLIENTE EXISTENTE
+// =========================================================
+
+async function linkChloeConversationClient({
+  conversationId,
+  clienteId
+}) {
+
+  return supabaseRpc(
+    'link_chloe_conversation_client',
+    {
+      p_conversation_id: conversationId,
+      p_cliente_id: clienteId
+    }
+  );
+}
+// =========================================================
 // INTERPRETAR GESTIÓN DE CITA EXISTENTE
 // =========================================================
 
@@ -1201,7 +1218,11 @@ exports.handler = async (event) => {
   const campaign =
     data.campaign || null;
 
-
+const incomingPhone =
+  data.phone ||
+  data.telefono ||
+  data.from_phone ||
+  null;
   try {
 
     // =====================================================
@@ -1216,6 +1237,40 @@ exports.handler = async (event) => {
       campaign
     });
 // =========================================================
+// IDENTIFICAR AUTOMÁTICAMENTE CLIENTE POR TELÉFONO
+// =========================================================
+
+if (
+  !memory.cliente_id &&
+  incomingPhone
+) {
+
+  const existingClient =
+    await findExistingClient({
+      telefono: incomingPhone,
+      clinicCode
+    });
+
+  if (
+    existingClient &&
+    existingClient.cliente_id
+  ) {
+
+    await linkChloeConversationClient({
+      conversationId:
+        memory.conversation_id,
+
+      clienteId:
+        existingClient.cliente_id
+    });
+
+    // Actualizamos también la memoria local de esta ejecución
+    // para que CHLOE pueda usar el cliente inmediatamente.
+    memory.cliente_id =
+      existingClient.cliente_id;
+  }
+}
+    // =========================================================
 // CLIENTE RECURRENTE — DETECTAR SOLICITUD DE NUEVA SESIÓN
 // =========================================================
 
