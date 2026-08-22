@@ -1201,22 +1201,140 @@ if (bookedIntent.intent === 'CANCEL') {
     reply
   });
 }
+// =====================================================
+// CONSULTAR CITA CONFIRMADA
+// =====================================================
+
+if (bookedIntent.intent === 'CHECK_APPOINTMENT') {
+
+  if (!memory.booked_appointment_id) {
+    throw new Error(
+      'No existe una cita asociada a esta conversación'
+    );
+  }
+
+  const detailsResult = await supabaseRpc(
+    'get_appointment_details',
+    {
+      p_appointment_id:
+        memory.booked_appointment_id,
+
+      p_clinic_code:
+        memory.clinic_code ||
+        'VALENCIA'
+    }
+  );
+
+  if (
+    !Array.isArray(detailsResult) ||
+    detailsResult.length === 0
+  ) {
+    throw new Error(
+      'No se pudieron recuperar los detalles de la cita'
+    );
+  }
+
+  const details =
+    detailsResult[0];
+
+  const date = new Date(
+    details.starts_at
+  );
+
+  const dateLabel =
+    new Intl.DateTimeFormat(
+      'es-ES',
+      {
+        timeZone:
+          'Europe/Madrid',
+        weekday:
+          'long',
+        day:
+          'numeric',
+        month:
+          'long',
+        year:
+          'numeric'
+      }
+    ).format(date);
+
+  const timeLabel =
+    new Intl.DateTimeFormat(
+      'es-ES',
+      {
+        timeZone:
+          'Europe/Madrid',
+        hour:
+          '2-digit',
+        minute:
+          '2-digit',
+        hour12:
+          false
+      }
+    ).format(date);
+
   const oaeUrl =
     memory.public_code
       ? `https://citas.onirikaclinicaestetica.com/?id=${memory.public_code}`
       : null;
 
+  const reply =
+    `Claro ✨ Tu cita es el ${dateLabel} a las ${timeLabel}, ` +
+    `para ${details.service_name}` +
+    `${details.especialista ? ` con ${details.especialista}` : ''}. ` +
+    `Te dejo también todos los detalles de tu experiencia.`;
+
+  await updateConversation({
+    conversationId:
+      memory.conversation_id,
+
+    state:
+      'BOOKED',
+
+    lastUserMessage:
+      message,
+
+    lastChloeReply:
+      reply
+  });
+
   return jsonResponse(200, {
     success: true,
-    
-    action: 'ALREADY_BOOKED',
-    conversation_id: memory.conversation_id,
-    appointment_id: memory.booked_appointment_id,
-    public_code: memory.public_code,
-    oae_url: oaeUrl,
 
-    reply:
-      'Tu cita ya está confirmada ✨ Te dejo nuevamente los detalles de tu experiencia.'
+    action:
+      'APPOINTMENT_DETAILS',
+
+    conversation_id:
+      memory.conversation_id,
+
+    appointment_id:
+      details.appointment_id,
+
+    service_code:
+      details.service_code,
+
+    service_name:
+      details.service_name,
+
+    specialist:
+      details.especialista,
+
+    starts_at:
+      details.starts_at,
+
+    ends_at:
+      details.ends_at,
+
+    status:
+      details.status,
+
+    public_code:
+      memory.public_code,
+
+    oae_url:
+      oaeUrl,
+
+    reply
   });
 }
 // =========================================================
