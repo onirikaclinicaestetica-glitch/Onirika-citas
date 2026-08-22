@@ -2373,24 +2373,6 @@ const acceptsSingleSlot =
     normalizedSlotReply.includes('confirmo')
   );
 
-const normalizedSlotReply =
-  String(message || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-
-const acceptsSingleSlot =
-  memory.offered_slots.length === 1 &&
-  (
-    normalizedSlotReply === 'si' ||
-    normalizedSlotReply.includes('me viene bien') ||
-    normalizedSlotReply.includes('me va bien') ||
-    normalizedSlotReply.includes('perfecto') ||
-    normalizedSlotReply.includes('vale') ||
-    normalizedSlotReply.includes('confirmo')
-  );
-
 const selected =
   acceptsSingleSlot
     ? memory.offered_slots[0]
