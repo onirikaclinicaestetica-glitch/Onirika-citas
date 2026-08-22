@@ -17,6 +17,91 @@ button,input,select,textarea{font:inherit}.hidden{display:none!important}
 .preview-wrap{max-width:560px;margin:auto;min-height:100vh;background:rgba(255,253,248,.96);box-shadow:0 20px 70px rgba(70,60,45,.10);border-radius:20px;overflow:hidden;border:1px solid #e3dbcf}.hero{padding:40px 30px 29px;background:linear-gradient(135deg,#F8F4EE,#E9E1D7);position:relative;overflow:hidden;min-height:430px}.hero-inner{position:relative;z-index:2;max-width:395px}.hero .brand{font-size:25px}.hero h2{font-family:Georgia,'Times New Roman',serif;font-size:43px;line-height:1.02;font-weight:400;margin:56px 0 13px;letter-spacing:-.025em}.hero .hello{font-family:Georgia,'Times New Roman',serif;font-size:22px;margin:23px 0 6px}.hero .thanks{font-size:13px;color:#65645e;line-height:1.5;margin:0}.goldline{height:1px;width:63px;background:var(--gold);margin:17px 0;position:relative}.goldline:after{content:'✦';position:absolute;right:-26px;top:-9px;color:var(--gold);font-size:13px}
 .abstract-art{position:absolute;right:-48px;top:-22px;width:365px;height:470px;opacity:.92;pointer-events:none;z-index:1}.abstract-art path{fill:none;stroke-linecap:round}.abstract-art .line1{stroke:rgba(199,181,141,.68);stroke-width:1}.abstract-art .line2{stroke:rgba(216,184,175,.46);stroke-width:.9}.abstract-art .line3{stroke:rgba(255,255,255,.80);stroke-width:1.1}.abstract-art .line4{stroke:rgba(105,105,93,.16);stroke-width:.8}.abstract-art circle{fill:rgba(199,181,141,.48)}
 .body{padding:0 22px 28px;margin-top:-55px;position:relative;z-index:3}.card{background:rgba(255,253,248,.96);border:1px solid #e2dacf;border-radius:15px;padding:18px;margin-bottom:14px;box-shadow:0 7px 23px rgba(70,60,45,.05)}.appt-row{display:grid;grid-template-columns:110px 1fr;gap:8px;padding:12px 3px;border-bottom:1px solid #e6dfd5;align-items:start}.appt-row:last-child{border-bottom:0}.label{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:#77736b}.value{font-size:15px;font-weight:600}.subvalue{font-size:12px;color:#76736c;font-weight:400;margin-top:2px}.twocol{display:grid;grid-template-columns:1fr 1fr;gap:12px}.mini h3,.card h3{font-size:11px;letter-spacing:.10em;text-transform:uppercase;margin:0 0 10px}.mini p,.card p{font-size:12px;line-height:1.48;margin:4px 0;color:#56554f}.mini .strong{font-weight:700;color:var(--ink);font-size:13px}.action{display:inline-block;text-decoration:none;border-radius:9px;background:var(--graphite);color:#fffdf8;padding:11px 13px;margin-top:10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase}.before{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.before div{font-size:11px;line-height:1.4;padding-right:8px;border-right:1px solid #e1d8cc}.before div:last-child{border:0}.policy strong{color:#2d2d29}.gratitude{margin-top:11px!important;color:#67635c!important}.gratitude:before{content:'♥';color:#b88f50;margin-right:8px}.actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:14px}.actions a{text-decoration:none;text-align:center;border-radius:10px;padding:12px 8px;font-size:9px;letter-spacing:.07em;text-transform:uppercase;border:1px solid var(--champagne);color:var(--charcoal);background:var(--paper)}.actions a.dark{background:var(--graphite);color:#fffdf8;border-color:#181916}.private{text-align:center;font-size:10px;color:#79756e;margin:14px 0}.footer{text-align:center;padding:4px 0 9px}.footer .brand{font-size:19px}.footer .brand-sub{font-size:6.5px}.footer:before{content:'';display:block;width:100%;height:1px;background:linear-gradient(90deg,var(--gold),transparent,var(--gold));margin-bottom:17px}
+  /* PROGRAM SESSION · PROGRESO */
+.program-progress{
+  background:linear-gradient(135deg,#FCFAF7,#F3EDE4);
+  border:1px solid #DDD2C2;
+  position:relative;
+  overflow:hidden;
+}
+
+.program-progress:before{
+  content:'';
+  position:absolute;
+  width:90px;
+  height:90px;
+  border:1px solid rgba(199,181,141,.28);
+  border-radius:50%;
+  right:-32px;
+  top:-35px;
+}
+
+.program-kicker{
+  font-size:9px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:#8A8175;
+  margin-bottom:8px;
+}
+
+.program-name{
+  font-family:Georgia,'Times New Roman',serif;
+  font-size:21px;
+  line-height:1.15;
+  color:var(--ink);
+  margin-bottom:14px;
+}
+
+.program-session{
+  display:flex;
+  align-items:baseline;
+  gap:7px;
+  margin-bottom:14px;
+}
+
+.program-session-current{
+  font-family:Georgia,'Times New Roman',serif;
+  font-size:38px;
+  line-height:1;
+  color:var(--ink);
+}
+
+.program-session-total{
+  font-size:13px;
+  color:#77736B;
+}
+
+.progress-track{
+  width:100%;
+  height:6px;
+  background:#E7E0D6;
+  border-radius:999px;
+  overflow:hidden;
+  margin:8px 0 9px;
+}
+
+.progress-fill{
+  height:100%;
+  background:linear-gradient(90deg,#B8A47B,#D6C49E);
+  border-radius:999px;
+}
+
+.progress-meta{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  font-size:10px;
+  color:#77736B;
+}
+
+.progress-message{
+  margin-top:14px!important;
+  padding-top:13px;
+  border-top:1px solid #E5DDD2;
+  font-family:Georgia,'Times New Roman',serif;
+  font-size:14px!important;
+  color:#514B45!important;
+}
 .client-only{max-width:560px;margin:25px auto}.client-toolbar{text-align:center;margin:0 0 12px}.client-toolbar a{color:#5d5b54;font-size:12px;text-decoration:none;border-bottom:1px solid #aaa59a}
 @media(max-width:900px){.workspace{grid-template-columns:1fr}.form-panel{position:static;max-width:560px;margin:auto}.preview-wrap{border-radius:18px}.tool-head{padding:0 10px}}
 @media(max-width:570px){.shell{padding:0 0 30px;margin:0}.tool-head{padding:16px 18px 0}.workspace{gap:16px}.form-panel,.preview-wrap{border-radius:0;border-left:0;border-right:0}.hero{padding:31px 22px 27px;min-height:400px}.hero h2{font-size:37px;margin-top:52px}.abstract-art{right:-105px;width:315px;opacity:.78}.body{padding:0 14px 25px}.twocol{grid-template-columns:1fr}.before{grid-template-columns:1fr}.before div{border-right:0;border-bottom:1px solid #e1d8cc;padding:7px 0}.actions{grid-template-columns:1fr}.appt-row{grid-template-columns:95px 1fr}.grid2{grid-template-columns:1fr}.form-panel{padding:21px 18px}.client-only{margin:0}}
@@ -66,6 +151,102 @@ const TREATMENT_CATEGORY={
 };
 function precareFor(treatment){return PRECARE[treatment]||[]}
 function treatmentCategory(treatment){return TREATMENT_CATEGORY[treatment]||''}
+  function programProgressHTML(d){
+
+  if(
+    d.experience_type !== 'PROGRAM_SESSION' ||
+    !d.program_session_number ||
+    !d.program_total_sessions
+  ){
+    return '';
+  }
+
+  const current =
+    Number(d.program_session_number);
+
+  const total =
+    Number(d.program_total_sessions);
+
+  const safeCurrent =
+    Math.min(
+      Math.max(current,1),
+      total
+    );
+
+  const percentage =
+    Math.round(
+      (safeCurrent / total) * 100
+    );
+
+  const remainingAfter =
+    Math.max(
+      total - safeCurrent,
+      0
+    );
+
+  const programName =
+    d.program_name ||
+    d.treatment ||
+    'Tu programa ONÍRIKA';
+
+  let message;
+
+  if(safeCurrent >= total){
+
+    message =
+      `✦ Has llegado a la última sesión de esta etapa de tu experiencia ONÍRIKA.`;
+
+  }else if(remainingAfter === 1){
+
+    message =
+      `Al completar esta sesión te quedará 1 sesión de tu programa.`;
+
+  }else{
+
+    message =
+      `Al completar esta sesión te quedarán ${remainingAfter} sesiones de tu programa.`;
+  }
+
+  return `
+    <div class="card program-progress">
+
+      <div class="program-kicker">
+        Tu progreso ONÍRIKA
+      </div>
+
+      <div class="program-name">
+        ${esc(programName)}
+      </div>
+
+      <div class="program-session">
+        <span class="program-session-current">
+          ${safeCurrent}
+        </span>
+
+        <span class="program-session-total">
+          de ${total} sesiones
+        </span>
+      </div>
+
+      <div class="progress-track">
+        <div
+          class="progress-fill"
+          style="width:${percentage}%"
+        ></div>
+      </div>
+
+      <div class="progress-meta">
+        <span>Sesión ${safeCurrent} de ${total}</span>
+        <span>${percentage}% del programa</span>
+      </div>
+
+      <p class="progress-message">
+        ${message}
+      </p>
+
+    </div>
+  `;
+}
 function applyPrecare(){
   const t=document.getElementById('treatment');
   const i=document.getElementById('instructions');
@@ -105,6 +286,9 @@ function clientHTML(d,withToolbar=false){const ins=(d.instructions||'').split('|
 <section class="hero">${svgAbstract()}<div class="hero-inner"><div class="brand">ONÍRIKA</div><div class="brand-sub">CLÍNICA MÉDICO-ESTÉTICA <span>·</span> VALENCIA</div><h2>Tu experiencia<br>está confirmada</h2><div class="goldline"></div><div class="hello">Hola, ${esc(firstName(d.name))}</div><p class="thanks">Gracias por confiar en nosotros.<br>Estamos deseando acompañarte en tu experiencia.</p></div></section>
 <div class="body">
 <div class="card"> <div class="appt-row"><div class="label">Fecha</div><div class="value">${esc(longDate(d.date))}</div></div><div class="appt-row"><div class="label">Hora</div><div class="value">${esc(d.time)}</div></div><div class="appt-row"><div class="label">Tratamiento</div><div class="value">${esc(d.treatment)}${treatmentCategory(d.treatment)?`<div class="subvalue">${esc(treatmentCategory(d.treatment))}</div>`:''}</div></div><div class="appt-row"><div class="label">Profesional</div><div class="value">con ${esc(d.professional)}</div></div><div class="appt-row"><div class="label">Duración</div><div class="value">${esc(d.duration)}</div></div></div>
+
+${programProgressHTML(d)}
+
 <div class="twocol"><div class="card mini"><h3>¿Cómo llegar?</h3><p>${esc(CONFIG.address)}</p><a class="action" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CONFIG.address)}">Abrir en Google Maps</a></div><div class="card mini"><h3>Parking recomendado</h3><p class="strong">${esc(CONFIG.parkingName)}</p><p>A tan solo 4 minutos a pie de ONÍRIKA.</p><a class="action" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CONFIG.parkingName+' Valencia')}">Abrir ruta al parking</a></div></div>
 <div class="card"><h3>Antes de venir</h3><div class="before">${ins.map(x=>`<div>${esc(x)}</div>`).join('')}</div></div>
 <div class="card policy"><h3>Política de cancelación</h3><p>Cada cita se reserva de forma exclusiva para ti y requiere una organización previa de nuestro equipo. Valoramos el tiempo que dedicamos a preparar cada experiencia.</p><p>Si necesitas modificar o cancelar tu visita, te agradeceremos que nos lo comuniques con <strong>al menos 24 horas de antelación</strong>, para poder ofrecer ese espacio a otra persona.</p><p class="gratitude">Gracias por ayudarnos a ofrecer una atención excepcional a todos nuestros pacientes.</p></div>
