@@ -303,7 +303,52 @@ ${programProgressHTML(d)}
 
 <div class="twocol"><div class="card mini"><h3>¿Cómo llegar?</h3><p>${esc(CONFIG.address)}</p><a class="action" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CONFIG.address)}">Abrir en Google Maps</a></div><div class="card mini"><h3>Parking recomendado</h3><p class="strong">${esc(CONFIG.parkingName)}</p><p>A tan solo 4 minutos a pie de ONÍRIKA.</p><a class="action" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CONFIG.parkingName+' Valencia')}">Abrir ruta al parking</a></div></div>
 <div class="card"><h3>Antes de venir</h3><div class="before">${ins.map(x=>`<div>${esc(x)}</div>`).join('')}</div></div>
-<div class="card policy"><h3>Política de cancelación</h3><p>Cada cita se reserva de forma exclusiva para ti y requiere una organización previa de nuestro equipo. Valoramos el tiempo que dedicamos a preparar cada experiencia.</p><p>Si necesitas modificar o cancelar tu visita, te agradeceremos que nos lo comuniques con <strong>al menos 24 horas de antelación</strong>, para poder ofrecer ese espacio a otra persona.</p><p class="gratitude">Gracias por ayudarnos a ofrecer una atención excepcional a todos nuestros pacientes.</p></div>
+<div class="card policy">
+  <h3>
+    ${
+      d.experience_type === 'PROGRAM_SESSION'
+        ? 'Política de tu reserva'
+        : 'Política de cancelación'
+    }
+  </h3>
+
+  ${
+    d.experience_type === 'PROGRAM_SESSION'
+      ? `
+        <p>
+          Cada cita se reserva de forma exclusiva para ti y forma parte de la planificación de tu programa.
+        </p>
+
+        <p>
+          Si necesitas modificar o cancelar tu visita, te agradecemos que nos lo comuniques con
+          <strong>al menos 24 horas de antelación</strong>.
+          Las cancelaciones fuera de este plazo o la no asistencia
+          <strong>se contabilizarán como sesión realizada</strong>,
+          salvo situaciones excepcionales de fuerza mayor debidamente justificadas.
+        </p>
+
+        <p class="gratitude">
+          Gracias por ayudarnos a cuidar tu tiempo y el de nuestro equipo.
+        </p>
+      `
+      : `
+        <p>
+          Cada cita se reserva de forma exclusiva para ti y requiere una organización previa de nuestro equipo.
+          Valoramos el tiempo que dedicamos a preparar cada experiencia.
+        </p>
+
+        <p>
+          Si necesitas modificar o cancelar tu visita, te agradeceremos que nos lo comuniques con
+          <strong>al menos 24 horas de antelación</strong>,
+          para poder ofrecer ese espacio a otra persona.
+        </p>
+
+        <p class="gratitude">
+          Gracias por ayudarnos a ofrecer una atención excepcional a todos nuestros pacientes.
+        </p>
+      `
+  }
+</div>
 <div class="actions"><a href="#" onclick="addCalendar(event,'${esc(d.date)}','${esc(d.time)}','${esc(d.treatment)}')">Añadir al calendario</a><a class="dark" target="_blank" href="https://wa.me/${CONFIG.whatsapp}?text=${reMsg}">Reprogramar cita<br>por WhatsApp</a><a class="dark" target="_blank" href="https://wa.me/${CONFIG.whatsapp}?text=${caMsg}">Cancelar cita<br>por WhatsApp</a></div><div class="private">🔒 Enlace privado e intransferible</div><div class="footer"><div class="brand">ONÍRIKA</div><div class="brand-sub">CLÍNICA MÉDICO-ESTÉTICA <span>·</span> VALENCIA</div></div>
 </div></div>`}
 function addCalendar(e,date,time,treatment){e.preventDefault();const start=new Date(`${date}T${time}:00`);const end=new Date(start.getTime()+60*60*1000);const fmt=d=>d.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');const text=encodeURIComponent(`ONÍRIKA · ${treatment}`);const dates=fmt(start)+'/'+fmt(end);window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${dates}&location=${encodeURIComponent(CONFIG.address)}`,'_blank')}
