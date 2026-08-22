@@ -1092,6 +1092,54 @@ async function cancelAppointment({
   return result[0];
 }
 // =========================================================
+// PROGRAMAS ACTIVOS DE CLIENTE
+// =========================================================
+
+async function getClientActivePrograms({
+  clienteId,
+  clinicCode = 'VALENCIA'
+}) {
+
+  const result = await supabaseRpc(
+    'get_client_active_programs',
+    {
+      p_cliente_id: clienteId,
+      p_clinic_code: clinicCode
+    }
+  );
+
+  return Array.isArray(result)
+    ? result
+    : [];
+}
+// =========================================================
+// DETECTAR SOLICITUD DE SESIÓN RECURRENTE
+// =========================================================
+
+function isRecurrentBookingRequest(message) {
+
+  const text =
+    String(message || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  return (
+    text.includes('proxima sesion') ||
+    text.includes('siguiente sesion') ||
+    text.includes('otra sesion') ||
+    text.includes('reservar mi sesion') ||
+    text.includes('agendar mi sesion') ||
+    text.includes('continuar mi tratamiento') ||
+    text.includes('continuar con mi tratamiento') ||
+    text.includes('continuar mi bono') ||
+    text.includes('continuar con mi bono') ||
+    text.includes('me toca otra sesion') ||
+    text.includes('me toca la siguiente')
+  );
+}
+// =========================================================
 // HANDLER PRINCIPAL CHLOE
 // =========================================================
 
@@ -1167,7 +1215,385 @@ exports.handler = async (event) => {
       source,
       campaign
     });
-// =====================================================
+// =========================================================
+// CLIENTE RECURRENTE — DETECTAR SOLICITUD DE NUEVA SESIÓN
+// =========================================================
+
+if (
+  memory.cliente_id &&
+  isRecurrentBookingRequest(message)
+) {
+
+  const activePrograms =
+    await getClientActivePrograms({
+      clienteId: memory.cliente_id,
+      clinicCode:
+        memory.clinic_code ||
+        clinicCode ||
+        'VALENCIA'
+    });
+
+  if (activePrograms.length === 0) {
+
+    const reply =
+      'Ahora mismo no veo ningún programa activo con sesiones pendientes ✨ Si quieres, puedo ayudarte a revisar otras opciones.';
+
+    await updateConversation({
+      conversationId:
+        memory.conversation_id,
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NO_ACTIVE_PROGRAMS',
+      conversation_id:
+        memory.conversation_id,
+      cliente_id:
+        memory.cliente_id,
+      reply
+    });
+  }
+
+  if (activePrograms.length === 1) {
+
+    const program =
+      activePrograms[0];
+
+    const reply =
+      `Claro ✨ Tienes ${program.remaining_sessions} sesiones pendientes de ${program.program_name}. ` +
+      `¿Qué día u horario te vendría mejor para tu próxima sesión?`;
+
+    await updateConversation({
+      conversationId:
+        memory.conversation_id,
+
+      serviceCode:
+        program.service_code,
+
+      appointmentType:
+        'recurrent',
+
+      state:
+        'AWAITING_RECURRENT_PREFERENCE',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NEED_RECURRENT_PREFERENCE',
+      conversation_id:
+        memory.conversation_id,
+      cliente_id:
+        memory.cliente_id,
+      client_program_id:
+        program.client_program_id,
+      program_code:
+        program.program_code,
+      program_name:
+        program.program_name,
+      remaining_sessions:
+        program.remaining_sessions,
+      service_code:
+        program.service_code,
+      reply
+    });
+  }
+
+  const reply =
+    'Veo que tienes más de un programa activo ✨ ¿De cuál quieres reservar tu próxima sesión?';
+
+  await updateConversation({
+    conversationId:
+      memory.conversation_id,
+
+    state:
+      'AWAITING_RECURRENT_PROGRAM_SELECTION',
+
+    lastUserMessage:
+      message,
+
+    lastChloeReply:
+      reply
+  });
+
+  return jsonResponse(200, {
+    success: true,
+    action: 'SELECT_RECURRENT_PROGRAM',
+    conversation_id:
+      memory.conversation_id,
+    cliente_id:
+      memory.cliente_id,
+    programs:
+      activePrograms,
+    reply
+  });
+}
+    // =========================================================
+// RECURRENTE — BUSCAR HORARIOS
+// =========================================================
+
+if (
+  memory.state ===
+  'AWAITING_RECURRENT_PREFERENCE'
+) {
+
+  const ai =
+    await interpretMessage(message);
+
+  const serviceCode =
+    ai.service_code ||
+    memory.service_code;
+
+  const fromDate =
+    ai.from_date ||
+    memory.from_date;
+
+  const toDate =
+    ai.to_date ||
+    memory.to_date;
+
+  const fromTime =
+    ai.from_time ||
+    memory.from_time ||
+    null;
+
+  const toTime =
+    ai.to_time ||
+    memory.to_time ||
+    null;
+
+
+  if (!fromDate) {
+
+    const reply =
+      'Perfecto ✨ ¿Qué día te vendría mejor para tu próxima sesión?';
+
+    await updateConversation({
+      conversationId:
+        memory.conversation_id,
+
+      state:
+        'AWAITING_RECURRENT_PREFERENCE',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NEED_RECURRENT_DATE',
+      conversation_id:
+        memory.conversation_id,
+      service_code:
+        serviceCode,
+      reply
+    });
+  }
+
+
+  const params =
+    new URLSearchParams({
+      service: serviceCode,
+      from: fromDate,
+      to: toDate || fromDate,
+      appointment_type: 'recurrent',
+      clinic:
+        memory.clinic_code ||
+        clinicCode ||
+        'VALENCIA',
+      max_results: '3'
+    });
+
+
+  if (fromTime) {
+    params.set(
+      'time_from',
+      fromTime
+    );
+  }
+
+  if (toTime) {
+    params.set(
+      'time_to',
+      toTime
+    );
+  }
+
+
+  const availabilityUrl =
+    `https://citas.onirikaclinicaestetica.com/.netlify/functions/availability?${params.toString()}`;
+
+
+  const availabilityResponse =
+    await fetch(
+      availabilityUrl,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json'
+        }
+      }
+    );
+
+
+  const availability =
+    await availabilityResponse.json();
+
+
+  if (!availabilityResponse.ok) {
+
+    return jsonResponse(502, {
+      success: false,
+      error:
+        'No se pudo consultar disponibilidad recurrente',
+      detail:
+        availability
+    });
+  }
+
+
+  const slots =
+    Array.isArray(availability.slots)
+      ? availability.slots
+      : [];
+
+
+  if (slots.length === 0) {
+
+    const reply =
+      'En esa franja no tengo disponibilidad ✨ Puedo buscarte otro horario o un día cercano.';
+
+    await updateConversation({
+      conversationId:
+        memory.conversation_id,
+
+      serviceCode,
+
+      appointmentType:
+        'recurrent',
+
+      fromDate,
+
+      toDate:
+        toDate || fromDate,
+
+      fromTime,
+
+      toTime,
+
+      state:
+        'AWAITING_RECURRENT_PREFERENCE',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action:
+        'NO_RECURRENT_SLOTS',
+      conversation_id:
+        memory.conversation_id,
+      service_code:
+        serviceCode,
+      reply
+    });
+  }
+
+
+  const optionText =
+    slots
+      .map(slot => slot.time_label)
+      .filter(Boolean)
+      .join(', ');
+
+
+  const firstDate =
+    slots[0]?.date_label ||
+    'ese día';
+
+
+  let reply;
+
+
+  if (slots.length === 1) {
+
+    reply =
+      `Perfecto ✨ Para ${firstDate} tengo disponibilidad a las ${slots[0].time_label}. ` +
+      `¿Te viene bien ese horario?`;
+
+  } else {
+
+    reply =
+      `Perfecto ✨ Para ${firstDate} tengo disponibilidad a las ${optionText}. ` +
+      `¿Cuál de estos horarios te viene mejor?`;
+  }
+
+
+  await updateConversation({
+    conversationId:
+      memory.conversation_id,
+
+    serviceCode,
+
+    appointmentType:
+      'recurrent',
+
+    fromDate,
+
+    toDate:
+      toDate || fromDate,
+
+    fromTime,
+
+    toTime,
+
+    offeredSlots:
+      slots,
+
+    state:
+      'OFFERING_RECURRENT_SLOTS',
+
+    lastUserMessage:
+      message,
+
+    lastChloeReply:
+      reply
+  });
+
+
+  return jsonResponse(200, {
+    success: true,
+    action:
+      'OFFER_RECURRENT_SLOTS',
+    conversation_id:
+      memory.conversation_id,
+    service_code:
+      serviceCode,
+    appointment_type:
+      'recurrent',
+    slots,
+    reply
+  });
+}
+    // =====================================================
 // CITA YA CONFIRMADA
 // =====================================================
 
@@ -2728,6 +3154,228 @@ if (
 
     oae_url:
       booking.oae_url,
+
+    reply
+  });
+}
+    // =========================================================
+// RECURRENTE — ELEGIR HORARIO Y RESERVAR SESIÓN
+// =========================================================
+
+if (
+  memory.state === 'OFFERING_RECURRENT_SLOTS' &&
+  Array.isArray(memory.offered_slots)
+) {
+
+  const normalizedRecurrentSlotReply =
+    String(message || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  const acceptsSingleRecurrentSlot =
+    memory.offered_slots.length === 1 &&
+    (
+      normalizedRecurrentSlotReply === 'si' ||
+      normalizedRecurrentSlotReply.includes('me viene bien') ||
+      normalizedRecurrentSlotReply.includes('me va bien') ||
+      normalizedRecurrentSlotReply.includes('perfecto') ||
+      normalizedRecurrentSlotReply.includes('vale') ||
+      normalizedRecurrentSlotReply.includes('confirmo')
+    );
+
+  const selected =
+    acceptsSingleRecurrentSlot
+      ? memory.offered_slots[0]
+      : findSelectedSlot(
+          message,
+          memory.offered_slots
+        );
+
+
+  if (!selected) {
+
+    const reply =
+      'No he podido identificar qué horario prefieres ✨ ¿Me indicas la hora o la opción que quieres?';
+
+    return jsonResponse(200, {
+      success: true,
+      action: 'NEED_RECURRENT_SLOT_SELECTION',
+      conversation_id: memory.conversation_id,
+      slots: memory.offered_slots,
+      reply
+    });
+  }
+
+
+  // =====================================================
+  // RECUPERAR PROGRAMA ACTIVO
+  // =====================================================
+
+  if (!memory.cliente_id) {
+    throw new Error(
+      'No existe cliente asociado a la conversación'
+    );
+  }
+
+  const activePrograms =
+    await getClientActivePrograms({
+      clienteId: memory.cliente_id,
+      clinicCode:
+        memory.clinic_code ||
+        clinicCode ||
+        'VALENCIA'
+    });
+
+  const matchingProgram =
+    activePrograms.find(
+      p =>
+        p.service_code ===
+        memory.service_code
+    );
+
+
+  if (!matchingProgram) {
+    throw new Error(
+      'No se encontró un programa activo para este servicio'
+    );
+  }
+
+
+  // =====================================================
+  // RESERVAR SESIÓN RECURRENTE
+  // =====================================================
+
+  const bookingResult =
+    await supabaseRpc(
+      'book_program_session',
+      {
+        p_client_program_id:
+          matchingProgram.client_program_id,
+
+        p_start:
+          selected.slot_start,
+
+        p_clinic_code:
+          memory.clinic_code ||
+          clinicCode ||
+          'VALENCIA'
+      }
+    );
+
+
+  if (
+    !Array.isArray(bookingResult) ||
+    bookingResult.length === 0
+  ) {
+    throw new Error(
+      'No se pudo reservar la sesión recurrente'
+    );
+  }
+
+
+  const booking =
+    bookingResult[0];
+
+
+  const date =
+    new Date(
+      booking.starts_at
+    );
+
+
+  const dateLabel =
+    new Intl.DateTimeFormat(
+      'es-ES',
+      {
+        timeZone:
+          'Europe/Madrid',
+        weekday:
+          'long',
+        day:
+          'numeric',
+        month:
+          'long',
+        year:
+          'numeric'
+      }
+    ).format(date);
+
+
+  const timeLabel =
+    new Intl.DateTimeFormat(
+      'es-ES',
+      {
+        timeZone:
+          'Europe/Madrid',
+        hour:
+          '2-digit',
+        minute:
+          '2-digit',
+        hour12:
+          false
+      }
+    ).format(date);
+
+
+  const reply =
+    `Perfecto ✨ Tu próxima sesión de ${booking.service_name} ha quedado confirmada ` +
+    `para ${dateLabel} a las ${timeLabel}. ` +
+    `Te atenderá ${booking.especialista}.`;
+
+
+  await updateConversation({
+    conversationId:
+      memory.conversation_id,
+
+    selectedSlotStart:
+      selected.slot_start,
+
+    state:
+      'BOOKED',
+
+    lastUserMessage:
+      message,
+
+    lastChloeReply:
+      reply
+  });
+
+
+  return jsonResponse(200, {
+    success: true,
+    action: 'RECURRENT_BOOKING_CONFIRMED',
+
+    conversation_id:
+      memory.conversation_id,
+
+    cliente_id:
+      memory.cliente_id,
+
+    client_program_id:
+      matchingProgram.client_program_id,
+
+    program_session_id:
+      booking.program_session_id,
+
+    session_number:
+      booking.session_number,
+
+    appointment_id:
+      booking.appointment_id,
+
+    specialist:
+      booking.especialista,
+
+    service_name:
+      booking.service_name,
+
+    starts_at:
+      booking.starts_at,
+
+    ends_at:
+      booking.ends_at,
 
     reply
   });
