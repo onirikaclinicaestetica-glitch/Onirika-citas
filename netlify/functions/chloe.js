@@ -2868,7 +2868,78 @@ if (
       });
     }
 
+// =========================================================
+// SOLICITUD DE INFORMACIÓN — NO INICIAR RESERVA TODAVÍA
+// =========================================================
 
+const normalizedInitialMessage =
+  String(message || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+const asksForInfo =
+  normalizedInitialMessage.includes('informacion') ||
+  normalizedInitialMessage.includes('info') ||
+  normalizedInitialMessage.includes('en que consiste') ||
+  normalizedInitialMessage.includes('como funciona') ||
+  normalizedInitialMessage.includes('que incluye') ||
+  normalizedInitialMessage.includes('cuentame') ||
+  normalizedInitialMessage.includes('saber mas');
+
+const wantsToBook =
+  normalizedInitialMessage.includes('reserv') ||
+  normalizedInitialMessage.includes('agend') ||
+  normalizedInitialMessage.includes('cita') ||
+  normalizedInitialMessage.includes('disponibilidad') ||
+  normalizedInitialMessage.includes('horario') ||
+  normalizedInitialMessage.includes('quiero ir');
+
+if (asksForInfo && !wantsToBook && serviceCode) {
+
+  const serviceInfo = {
+
+    SCULPT360:
+      'SCULPT360 es nuestra experiencia corporal enfocada en reducción de volumen y remodelación ✨ Comenzamos con un diagnóstico corporal y mapa térmico para conocer cómo responde tu cuerpo y combinamos HIFEM, cavitación e INDIBA de forma estratégica.',
+
+    CELLULITE:
+      'CELLULITE RESET es nuestra experiencia enfocada en mejorar el aspecto de la celulitis y la textura de la piel ✨ Combinamos diagnóstico corporal, mapa térmico y distintas tecnologías según las necesidades de la zona.',
+
+    PORCELAIN:
+      'INDIBA PORCELAIN SKIN es una experiencia facial enfocada en luminosidad, calidad de piel y revitalización ✨ Comenzamos con diagnóstico facial y trabajamos con INDIBA 448 kHz de forma personalizada.',
+
+    EXPERT_JET:
+      'EXPERT JET SKIN RESET es una experiencia de renovación facial profunda y tecnológica ✨ Incluye diagnóstico facial y un protocolo Expert Jet adaptado a las necesidades de tu piel.',
+
+    LASER3D:
+      'ONÍRIKA LASER 3D es nuestra experiencia de depilación láser con tecnología de triple longitud de onda ✨ Antes de comenzar realizamos un diagnóstico para adaptar la sesión a tu piel y al tipo de vello.'
+  };
+
+  const info =
+    serviceInfo[serviceCode] ||
+    'Claro ✨ Te cuento encantada sobre esta experiencia.';
+
+  const reply =
+    `${info}\n\n` +
+    `La sesión de bienvenida tiene un valor de 79€. ` +
+    `Si quieres, puedo ayudarte a encontrar el mejor horario para ti ✨`;
+
+  await updateConversation({
+    conversationId: memory.conversation_id,
+    serviceCode,
+    lastUserMessage: message,
+    lastChloeReply: reply
+  });
+
+  return jsonResponse(200, {
+    success: true,
+    action: 'SERVICE_INFO',
+    conversation_id: memory.conversation_id,
+    service_code: serviceCode,
+    reply
+  });
+}
     // =====================================================
     // FALTA FECHA
     // =====================================================
