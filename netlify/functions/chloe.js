@@ -2755,32 +2755,31 @@ if (
       Array.isArray(memory.offered_slots)
     ) {
 
-      const normalizedSlotReply =
+      const normalizedBookingSlotReply =
   String(message || '')
     .trim()
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
-const acceptsSingleSlot =
+const acceptsSingleBookingSlot =
   memory.offered_slots.length === 1 &&
   (
-    normalizedSlotReply === 'si' ||
-    normalizedSlotReply.includes('me viene bien') ||
-    normalizedSlotReply.includes('me va bien') ||
-    normalizedSlotReply.includes('perfecto') ||
-    normalizedSlotReply.includes('vale') ||
-    normalizedSlotReply.includes('confirmo')
+    normalizedBookingSlotReply === 'si' ||
+    normalizedBookingSlotReply.includes('me viene bien') ||
+    normalizedBookingSlotReply.includes('me va bien') ||
+    normalizedBookingSlotReply.includes('perfecto') ||
+    normalizedBookingSlotReply.includes('vale') ||
+    normalizedBookingSlotReply.includes('confirmo')
   );
 
 const selected =
-  acceptsSingleSlot
+  acceptsSingleBookingSlot
     ? memory.offered_slots[0]
     : findSelectedSlot(
         message,
         memory.offered_slots
       );
-
 
       if (selected) {
 
