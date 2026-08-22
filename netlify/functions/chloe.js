@@ -319,10 +319,10 @@ Laser 3D.
 REGLAS TEMPORALES:
 
 "por la mañana":
-10:00–14:00
+10:00–13:59
 
 "por la tarde":
-16:00–20:00
+14:00–20:00
 
 "a primera hora":
 10:00–12:00
@@ -937,10 +937,10 @@ Reglas:
 
 - "por la mañana":
   from_time = "10:00"
-  to_time = "14:00"
+  to_time = "13:59"
 
 - "por la tarde":
-  from_time = "16:00"
+  from_time = "14:00"
   to_time = "20:00"
 
 - Si da una hora concreta, por ejemplo "a las 18",
