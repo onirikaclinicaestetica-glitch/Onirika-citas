@@ -3304,7 +3304,7 @@ if (
 
   const bookingResult =
     await supabaseRpc(
-      'book_program_session',
+      'book_program_session_with_oae',
       {
         p_client_program_id:
           matchingProgram.client_program_id,
@@ -3374,10 +3374,20 @@ if (
     ).format(date);
 
 
-  const reply =
-    `Perfecto ✨ Tu próxima sesión de ${booking.service_name} ha quedado confirmada ` +
-    `para ${dateLabel} a las ${timeLabel}. ` +
-    `Te atenderá ${booking.especialista}.`;
+  const oaeUrl =
+  booking.public_code
+    ? `https://citas.onirikaclinicaestetica.com/?id=${booking.public_code}`
+    : null;
+
+const reply =
+  `Perfecto ✨ Tu próxima sesión de ${booking.service_name} ha quedado confirmada ` +
+  `para ${dateLabel} a las ${timeLabel}. ` +
+  `Te atenderá ${booking.especialista}.` +
+  (
+    oaeUrl
+      ? ` Aquí tienes todos los detalles y el progreso de tu programa: ${oaeUrl}`
+      : ''
+  );
 
 
   await updateConversation({
@@ -3418,7 +3428,14 @@ if (
       booking.session_number,
 
     appointment_id:
-      booking.appointment_id,
+      booking.appointment_id, oae_id:
+  booking.oae_id,
+
+public_code:
+  booking.public_code,
+
+oae_url:
+  oaeUrl,
 
     specialist:
       booking.especialista,
