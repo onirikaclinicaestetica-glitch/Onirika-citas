@@ -1,15 +1,21 @@
 exports.handler = async (event) => {
 
+  const jsonHeaders = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store'
+  };
+
+
   // =====================================================
-  // 1. SOLO PERMITIR POST
+  // 1. SOLO POST
   // =====================================================
 
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
       headers: {
-        'Content-Type': 'application/json',
-        'Allow': 'POST'
+        ...jsonHeaders,
+        Allow: 'POST'
       },
       body: JSON.stringify({
         success: false,
@@ -20,7 +26,7 @@ exports.handler = async (event) => {
 
 
   // =====================================================
-  // 2. VARIABLES DE ENTORNO
+  // 2. VARIABLES INTERNAS
   // =====================================================
 
   const SUPABASE_URL =
@@ -33,12 +39,10 @@ exports.handler = async (event) => {
   if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
     return {
       statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: jsonHeaders,
       body: JSON.stringify({
         success: false,
-        error: 'Configuración de Supabase incompleta'
+        error: 'Configuración interna incompleta'
       })
     };
   }
@@ -47,7 +51,7 @@ exports.handler = async (event) => {
   try {
 
     // =====================================================
-    // 3. LEER BODY
+    // 3. LEER JSON
     // =====================================================
 
     let body;
@@ -57,9 +61,7 @@ exports.handler = async (event) => {
     } catch (e) {
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: jsonHeaders,
         body: JSON.stringify({
           success: false,
           error: 'JSON inválido'
@@ -69,7 +71,104 @@ exports.handler = async (event) => {
 
 
     // =====================================================
-    // 4. NORMALIZAR DATOS
+    // 4. CLAVE DE INTEGRACIÓN
+    // =====================================================
+
+    const rawAgencyKey =
+      event.headers?.['x-onirika-agency-key'] ||
+      event.headers?.['X-Onirika-Agency-Key'] ||
+      null;
+
+
+    if (!rawAgencyKey || !rawAgencyKey.trim()) {
+      return {
+        statusCode: 401,
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          success: false,
+          error: 'Credencial de integración requerida'
+        })
+      };
+    }
+
+
+    // =====================================================
+    // 5. CLÍNICA
+    // =====================================================
+
+    const clinic_code =
+      body.clinic_code?.trim() ||
+      'VALENCIA';
+
+
+    // =====================================================
+    // 6. RESOLVER AGENCIA DESDE LA CLAVE
+    // =====================================================
+
+    const resolveUrl =
+      `${SUPABASE_URL}/rest/v1/rpc/resolve_agency_by_integration_key`;
+
+
+    const resolveResponse =
+      await fetch(resolveUrl, {
+        method: 'POST',
+
+        headers: {
+          apikey: SUPABASE_SECRET_KEY,
+          Authorization:
+            `Bearer ${SUPABASE_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+
+        body: JSON.stringify({
+          p_raw_key: rawAgencyKey.trim(),
+          p_clinic_code: clinic_code
+        })
+      });
+
+
+    if (!resolveResponse.ok) {
+
+      console.error(
+        'Agency key resolution failed:',
+        await resolveResponse.text()
+      );
+
+      return {
+        statusCode: 500,
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          success: false,
+          error: 'No se pudo validar la integración'
+        })
+      };
+    }
+
+
+    const agencyData =
+      await resolveResponse.json();
+
+    const agency =
+      Array.isArray(agencyData)
+        ? agencyData[0]
+        : agencyData;
+
+
+    if (!agency?.agency_code) {
+      return {
+        statusCode: 401,
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          success: false,
+          error: 'Credencial de integración inválida'
+        })
+      };
+    }
+
+
+    // =====================================================
+    // 7. NORMALIZAR LEAD
     // =====================================================
 
     const first_name =
@@ -93,23 +192,15 @@ exports.handler = async (event) => {
     const campaign =
       body.campaign?.trim() || null;
 
-    const agency_code =
-      body.agency_code?.trim() || null;
-
-    const clinic_code =
-      body.clinic_code?.trim() || 'VALENCIA';
-
 
     // =====================================================
-    // 5. VALIDACIONES
+    // 8. VALIDACIONES
     // =====================================================
 
     if (!first_name) {
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: jsonHeaders,
         body: JSON.stringify({
           success: false,
           error: 'Falta first_name'
@@ -121,12 +212,11 @@ exports.handler = async (event) => {
     if (!phone && !email) {
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: jsonHeaders,
         body: JSON.stringify({
           success: false,
-          error: 'El lead debe tener al menos phone o email'
+          error:
+            'El lead debe tener al menos phone o email'
         })
       };
     }
@@ -135,9 +225,7 @@ exports.handler = async (event) => {
     if (!service_code) {
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: jsonHeaders,
         body: JSON.stringify({
           success: false,
           error: 'Falta service_code'
@@ -147,7 +235,11 @@ exports.handler = async (event) => {
 
 
     // =====================================================
-    // 6. PAYLOAD PARA SUPABASE
+    // 9. PAYLOAD SEGURO
+    //
+    // IMPORTANTE:
+    // agency_code NO se toma del body.
+    // Lo determina exclusivamente la credencial.
     // =====================================================
 
     const rpcPayload = {
@@ -174,7 +266,7 @@ exports.handler = async (event) => {
         campaign,
 
       p_agency_code:
-        agency_code,
+        agency.agency_code,
 
       p_meta_campaign_id:
         body.meta_campaign_id || null,
@@ -212,42 +304,29 @@ exports.handler = async (event) => {
 
 
     // =====================================================
-    // 7. LLAMAR RPC
+    // 10. INGESTAR LEAD
     // =====================================================
 
-    const rpcUrl =
+    const ingestUrl =
       `${SUPABASE_URL}/rest/v1/rpc/ingest_marketing_lead`;
 
 
     const response =
-      await fetch(
-        rpcUrl,
-        {
-          method: 'POST',
+      await fetch(ingestUrl, {
+        method: 'POST',
 
-          headers: {
-            apikey:
-              SUPABASE_SECRET_KEY,
+        headers: {
+          apikey: SUPABASE_SECRET_KEY,
+          Authorization:
+            `Bearer ${SUPABASE_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
 
-            Authorization:
-              `Bearer ${SUPABASE_SECRET_KEY}`,
+        body:
+          JSON.stringify(rpcPayload)
+      });
 
-            'Content-Type':
-              'application/json',
-
-            Accept:
-              'application/json'
-          },
-
-          body:
-            JSON.stringify(rpcPayload)
-        }
-      );
-
-
-    // =====================================================
-    // 8. CONTROLAR ERROR SUPABASE
-    // =====================================================
 
     if (!response.ok) {
 
@@ -261,22 +340,14 @@ exports.handler = async (event) => {
 
       return {
         statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: jsonHeaders,
         body: JSON.stringify({
           success: false,
-          error:
-            'No se pudo registrar el lead',
-          detail
+          error: 'No se pudo registrar el lead'
         })
       };
     }
 
-
-    // =====================================================
-    // 9. RESULTADO
-    // =====================================================
 
     const data =
       await response.json();
@@ -290,37 +361,26 @@ exports.handler = async (event) => {
     if (!result) {
       return {
         statusCode: 500,
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: jsonHeaders,
         body: JSON.stringify({
           success: false,
-          error:
-            'Supabase no devolvió el lead'
+          error: 'No se obtuvo resultado del lead'
         })
       };
     }
 
 
     // =====================================================
-    // 10. RESPUESTA PÚBLICA
+    // 11. RESPUESTA
     // =====================================================
 
     return {
       statusCode: 200,
-
-      headers: {
-        'Content-Type':
-          'application/json',
-
-        'Cache-Control':
-          'no-store'
-      },
+      headers: jsonHeaders,
 
       body: JSON.stringify({
 
-        success:
-          true,
+        success: true,
 
         lead_id:
           result.lead_id,
@@ -364,12 +424,7 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 500,
-
-      headers: {
-        'Content-Type':
-          'application/json'
-      },
-
+      headers: jsonHeaders,
       body: JSON.stringify({
         success: false,
         error:
