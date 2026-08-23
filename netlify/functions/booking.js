@@ -71,10 +71,12 @@ exports.handler = async (event) => {
 
   landing_page = null,
 
-  utm_source = null,
+    utm_source = null,
   utm_medium = null,
   utm_campaign = null,
-  utm_content = null
+  utm_content = null,
+
+  existing_lead_id = null
 
 } = data;
 
@@ -114,27 +116,56 @@ body: JSON.stringify({
 
   p_has_own_phone: has_own_phone,
 
-  p_referred_by_cliente_id: referred_by_cliente_id,
-  p_contact_name: contact_name,
-  p_contact_phone: contact_phone,
-  p_contact_email: contact_email,
-  p_relationship: relationship,
+  p_referred_by_cliente_id:
+    referred_by_cliente_id,
 
-  p_agency_code: agency_code,
+  p_contact_name:
+    contact_name,
 
-  p_meta_campaign_id: meta_campaign_id,
-  p_meta_adset_id: meta_adset_id,
-  p_meta_ad_id: meta_ad_id,
+  p_contact_phone:
+    contact_phone,
 
-  p_meta_lead_id: meta_lead_id,
-  p_meta_form_id: meta_form_id,
+  p_contact_email:
+    contact_email,
 
-  p_landing_page: landing_page,
+  p_relationship:
+    relationship,
 
-  p_utm_source: utm_source,
-  p_utm_medium: utm_medium,
-  p_utm_campaign: utm_campaign,
-  p_utm_content: utm_content
+  p_agency_code:
+    agency_code,
+
+  p_meta_campaign_id:
+    meta_campaign_id,
+
+  p_meta_adset_id:
+    meta_adset_id,
+
+  p_meta_ad_id:
+    meta_ad_id,
+
+  p_meta_lead_id:
+    meta_lead_id,
+
+  p_meta_form_id:
+    meta_form_id,
+
+  p_landing_page:
+    landing_page,
+
+  p_utm_source:
+    utm_source,
+
+  p_utm_medium:
+    utm_medium,
+
+  p_utm_campaign:
+    utm_campaign,
+
+  p_utm_content:
+    utm_content,
+
+  p_existing_lead_id:
+    existing_lead_id || null
 })
     });
 
