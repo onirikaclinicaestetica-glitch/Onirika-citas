@@ -1195,47 +1195,135 @@ exports.handler = async (event) => {
   }
 
 
-  const externalConversationId =
-    data.external_conversation_id;
+ const externalConversationId =
+  data.external_conversation_id;
 
-  if (!externalConversationId) {
-    return jsonResponse(400, {
-      success: false,
-      error: 'Falta external_conversation_id'
-    });
-  }
+if (!externalConversationId) {
+  return jsonResponse(400, {
+    success: false,
+    error: 'Falta external_conversation_id'
+  });
+}
 
 
-  const channel =
-    data.channel || 'web';
+const channel =
+  data.channel || 'web';
 
-  const clinicCode =
-    data.clinic_code || 'VALENCIA';
+const clinicCode =
+  data.clinic_code || 'VALENCIA';
 
-  const source =
-    data.source || 'META';
+const source =
+  data.source || 'META';
 
-  const campaign =
-    data.campaign || null;
+const campaign =
+  data.campaign || null;
+
 
 const incomingPhone =
   data.phone ||
   data.telefono ||
   data.from_phone ||
   null;
-  try {
 
-    // =====================================================
-    // 1. RECUPERAR MEMORIA
-    // =====================================================
 
-    const memory = await getConversation({
-      externalConversationId,
-      channel,
-      clinicCode,
-      source,
-      campaign
-    });
+try {
+
+  // =====================================================
+  // 1. RECUPERAR MEMORIA
+  // =====================================================
+
+  let memory = await getConversation({
+    externalConversationId,
+    channel,
+    clinicCode,
+    source,
+    campaign
+  });
+
+
+  // =====================================================
+  // 1B. VINCULAR LEAD DE MARKETING AUTOMÁTICAMENTE
+  //
+  // Solo si:
+  // - tenemos teléfono entrante
+  // - todavía no hay cliente vinculado
+  // - todavía no hay lead vinculado
+  // =====================================================
+
+  if (
+    incomingPhone &&
+    !memory.cliente_id &&
+    !memory.lead_id
+  ) {
+
+    try {
+
+      const linkedLead =
+        await supabaseRpc(
+          'link_chloe_conversation_to_marketing_lead',
+          {
+            p_conversation_id:
+              memory.conversation_id,
+
+            p_phone:
+              incomingPhone
+          }
+        );
+
+
+      if (
+        Array.isArray(linkedLead) &&
+        linkedLead.length > 0
+      ) {
+
+        const leadLink =
+          linkedLead[0];
+
+
+        memory = {
+          ...memory,
+
+          lead_id:
+            leadLink.lead_id ||
+            memory.lead_id ||
+            null,
+
+          service_code:
+            leadLink.service_code ||
+            memory.service_code ||
+            null,
+
+          source:
+            leadLink.source ||
+            memory.source ||
+            source,
+
+          campaign:
+            leadLink.campaign ||
+            memory.campaign ||
+            campaign,
+
+          agency_code:
+            leadLink.agency_code ||
+            null,
+
+          attribution_status:
+            leadLink.attribution_status ||
+            null
+        };
+      }
+
+    } catch (linkError) {
+
+      console.error(
+        'Error vinculando lead de marketing:',
+        linkError
+      );
+
+      // No bloqueamos CHLOE si falla la vinculación.
+      // Continúa con el flujo normal.
+    }
+  }
 // =========================================================
 // IDENTIFICAR AUTOMÁTICAMENTE CLIENTE POR TELÉFONO
 // =========================================================
