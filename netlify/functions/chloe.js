@@ -622,24 +622,30 @@ async function createBooking({
   apellidos,
   telefono,
   email,
+
   serviceCode,
   slotStart,
   clinicCode,
-    source,
+
+  source,
   campaign,
+
   hasOwnPhone = true,
 
   referredByClienteId = null,
   contactName = null,
   contactPhone = null,
   contactEmail = null,
-  relationship = null
+  relationship = null,
+
+  existingLeadId = null
 }) {
 
   const response = await fetch(
     'https://citas.onirikaclinicaestetica.com/.netlify/functions/booking',
     {
       method: 'POST',
+
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json'
@@ -660,11 +666,23 @@ async function createBooking({
 
         has_own_phone: hasOwnPhone,
 
-referred_by_cliente_id: referredByClienteId,
-contact_name: contactName,
-contact_phone: contactPhone,
-contact_email: contactEmail,
-relationship: relationship
+        referred_by_cliente_id:
+          referredByClienteId,
+
+        contact_name:
+          contactName,
+
+        contact_phone:
+          contactPhone,
+
+        contact_email:
+          contactEmail,
+
+        relationship:
+          relationship,
+
+        existing_lead_id:
+          existingLeadId
       })
     }
   );
@@ -2827,23 +2845,26 @@ const booking = await createBooking({
     memory.source || 'META',
 
   campaign:
-  memory.campaign || null,
+    memory.campaign || null,
 
-hasOwnPhone,
+  hasOwnPhone,
 
-referredByClienteId,
+  referredByClienteId,
 
-contactName:
-  contactName || memory.contact_name || null,
+  contactName:
+    contactName || memory.contact_name || null,
 
-contactPhone:
-  contactPhone || memory.contact_phone || null,
+  contactPhone:
+    contactPhone || memory.contact_phone || null,
 
-contactEmail:
-  memory.contact_email || null,
+  contactEmail:
+    memory.contact_email || null,
 
-relationship:
-  relationship || memory.relationship || null
+  relationship:
+    relationship || memory.relationship || null,
+
+  existingLeadId:
+    memory.lead_id || null
 });
 
 
