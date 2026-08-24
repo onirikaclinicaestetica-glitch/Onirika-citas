@@ -170,18 +170,60 @@ body: JSON.stringify({
     });
 
     if (!response.ok) {
-      const detail = await response.text();
+  const rawDetail = await response.text();
 
-      return {
-        statusCode: 500,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          success: false,
-          error: 'No se pudo crear la cita',
-          detail
-        })
-      };
-    }
+  let supabaseError = null;
+
+  try {
+    supabaseError = JSON.parse(rawDetail);
+  } catch (e) {
+    supabaseError = null;
+  }
+
+  const errorMessage =
+    supabaseError?.message ||
+    rawDetail ||
+    'No se pudo crear la cita';
+
+  const slotWasTaken =
+    errorMessage.includes(
+      'El horario acaba de ser ocupado'
+    ) ||
+    errorMessage.includes(
+      'No hay especialistas disponibles para este horario'
+    );
+
+  if (slotWasTaken) {
+    return {
+      statusCode: 409,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store'
+      },
+      body: JSON.stringify({
+        success: false,
+        code: 'SLOT_NO_LONGER_AVAILABLE',
+        error:
+          'Ese horario acaba de dejar de estar disponible.',
+        action: 'REFRESH_AVAILABILITY'
+      })
+    };
+  }
+
+  return {
+    statusCode: 500,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store'
+    },
+    body: JSON.stringify({
+      success: false,
+      code: 'BOOKING_ERROR',
+      error: 'No se pudo crear la cita',
+      detail: errorMessage
+    })
+  };
+}
 
     const rows = await response.json();
 
