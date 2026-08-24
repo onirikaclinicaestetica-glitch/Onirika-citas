@@ -721,7 +721,7 @@ async function createBooking({
   }
 
   return result;
-
+}
 // =========================================================
 // REFRESCAR DISPONIBILIDAD DESPUÉS DE CONFLICTO
 // =========================================================
