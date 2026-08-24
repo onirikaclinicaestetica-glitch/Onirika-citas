@@ -1462,6 +1462,72 @@ if (
     // para que CHLOE pueda usar el cliente inmediatamente.
     memory.cliente_id =
       existingClient.cliente_id;
+        // =====================================================
+    // BUSCAR PRÓXIMA CITA ACTIVA DEL CLIENTE
+    // =====================================================
+
+    const activeAppointments =
+      await supabaseRpc(
+        'find_next_active_appointment',
+        {
+          p_cliente_id:
+            existingClient.cliente_id,
+
+          p_clinic_code:
+            clinicCode
+        }
+      );
+
+
+    if (
+      Array.isArray(activeAppointments) &&
+      activeAppointments.length > 0
+    ) {
+
+      const activeAppointment =
+        activeAppointments[0];
+
+
+      const linkedAppointment =
+        await supabaseRpc(
+          'link_chloe_conversation_appointment',
+          {
+            p_conversation_id:
+              memory.conversation_id,
+
+            p_appointment_id:
+              activeAppointment.appointment_id
+          }
+        );
+
+
+      if (
+        Array.isArray(linkedAppointment) &&
+        linkedAppointment.length > 0
+      ) {
+
+        const appointmentLink =
+          linkedAppointment[0];
+
+
+        // Actualizamos también la memoria local
+        // para usar la cita en esta misma ejecución.
+        memory.booked_appointment_id =
+          appointmentLink.appointment_id;
+
+        memory.service_code =
+          appointmentLink.service_code;
+
+        memory.appointment_type =
+          appointmentLink.appointment_type;
+
+        memory.public_code =
+          appointmentLink.public_code || null;
+
+        memory.state =
+          'BOOKED';
+      }
+    }
   }
 }
     // =========================================================
