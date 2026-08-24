@@ -722,7 +722,72 @@ async function createBooking({
 
   return result;
 
+// =========================================================
+// REFRESCAR DISPONIBILIDAD DESPUÉS DE CONFLICTO
+// =========================================================
 
+async function refreshAvailability({
+  serviceCode,
+  fromDate,
+  toDate,
+  appointmentType = 'first_visit',
+  clinicCode = 'VALENCIA',
+  fromTime = null,
+  toTime = null,
+  maxResults = 3
+}) {
+
+  const params =
+    new URLSearchParams({
+      service: serviceCode,
+      from: fromDate,
+      to: toDate || fromDate,
+      appointment_type: appointmentType,
+      clinic: clinicCode,
+      max_results: String(maxResults)
+    });
+
+  if (fromTime) {
+    params.set(
+      'time_from',
+      fromTime
+    );
+  }
+
+  if (toTime) {
+    params.set(
+      'time_to',
+      toTime
+    );
+  }
+
+  const availabilityUrl =
+    `https://citas.onirikaclinicaestetica.com/.netlify/functions/availability?${params.toString()}`;
+
+  const response =
+    await fetch(
+      availabilityUrl,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json'
+        }
+      }
+    );
+
+  const result =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      'No se pudo refrescar la disponibilidad'
+    );
+  }
+
+  return Array.isArray(result.slots)
+    ? result.slots
+    : [];
+}
 // =========================================================
 // FINALIZAR MEMORIA DE RESERVA
 // =========================================================
@@ -2848,47 +2913,215 @@ relationship,
 
 // Crear cita real
 
-const booking = await createBooking({
+let booking;
 
-  nombre,
-  apellidos,
-  telefono,
-  email,
+try {
 
-  serviceCode:
-    memory.service_code,
+  booking = await createBooking({
 
-  slotStart:
-    memory.selected_slot_start,
+    nombre,
+    apellidos,
+    telefono,
+    email,
 
-  clinicCode:
-    memory.clinic_code || 'VALENCIA',
+    serviceCode:
+      memory.service_code,
 
-  source:
-    memory.source || 'META',
+    slotStart:
+      memory.selected_slot_start,
 
-  campaign:
-    memory.campaign || null,
+    clinicCode:
+      memory.clinic_code || 'VALENCIA',
 
-  hasOwnPhone,
+    source:
+      memory.source || 'META',
 
-  referredByClienteId,
+    campaign:
+      memory.campaign || null,
 
-  contactName:
-    contactName || memory.contact_name || null,
+    hasOwnPhone,
 
-  contactPhone:
-    contactPhone || memory.contact_phone || null,
+    referredByClienteId,
 
-  contactEmail:
-    memory.contact_email || null,
+    contactName:
+      contactName || memory.contact_name || null,
 
-  relationship:
-    relationship || memory.relationship || null,
+    contactPhone:
+      contactPhone || memory.contact_phone || null,
 
-  existingLeadId:
-    memory.lead_id || null
-});
+    contactEmail:
+      memory.contact_email || null,
+
+    relationship:
+      relationship || memory.relationship || null,
+
+    existingLeadId:
+      memory.lead_id || null
+  });
+
+} catch (bookingError) {
+
+  if (
+    bookingError?.code ===
+    'SLOT_NO_LONGER_AVAILABLE'
+  ) {
+
+    const refreshedSlots =
+      await refreshAvailability({
+
+        serviceCode:
+          memory.service_code,
+
+        fromDate:
+          memory.from_date,
+
+        toDate:
+          memory.to_date ||
+          memory.from_date,
+
+        appointmentType:
+          memory.appointment_type ||
+          'first_visit',
+
+        clinicCode:
+          memory.clinic_code ||
+          'VALENCIA',
+
+        fromTime:
+          memory.from_time ||
+          null,
+
+        toTime:
+          memory.to_time ||
+          null,
+
+        maxResults:
+          3
+      });
+
+
+    // -----------------------------------------
+    // YA NO QUEDAN OPCIONES EN ESA FRANJA
+    // -----------------------------------------
+
+    if (refreshedSlots.length === 0) {
+
+      const reply =
+        'Ese horario acaba de ocuparse ✨ ' +
+        'Y en esa misma franja ya no me quedan opciones disponibles. ' +
+        '¿Quieres que busque otro horario o un día cercano?';
+
+      await updateConversation({
+
+        conversationId:
+          memory.conversation_id,
+
+        state:
+          'NO_AVAILABILITY',
+
+        lastUserMessage:
+          message,
+
+        lastChloeReply:
+          reply
+      });
+
+      return jsonResponse(200, {
+
+        success: true,
+
+        action:
+          'SLOT_TAKEN_NO_ALTERNATIVES',
+
+        conversation_id:
+          memory.conversation_id,
+
+        service_code:
+          memory.service_code,
+
+        slots: [],
+
+        reply
+      });
+    }
+
+
+    // -----------------------------------------
+    // HAY NUEVAS ALTERNATIVAS
+    // -----------------------------------------
+
+    const optionText =
+      refreshedSlots
+        .map(slot =>
+          slot.time_label
+        )
+        .filter(Boolean)
+        .join(', ');
+
+    const firstDate =
+      refreshedSlots[0]?.date_label ||
+      'ese día';
+
+    let reply;
+
+    if (refreshedSlots.length === 1) {
+
+      reply =
+        `Ese horario acaba de ocuparse ✨ ` +
+        `Pero para ${firstDate} todavía tengo disponibilidad ` +
+        `a las ${refreshedSlots[0].time_label}. ` +
+        `¿Te viene bien?`;
+
+    } else {
+
+      reply =
+        `Ese horario acaba de ocuparse ✨ ` +
+        `Pero para ${firstDate} todavía tengo estas opciones: ` +
+        `${optionText}. ¿Cuál te viene mejor?`;
+    }
+
+
+    await updateConversation({
+
+      conversationId:
+        memory.conversation_id,
+
+      offeredSlots:
+        refreshedSlots,
+
+      state:
+        'OFFERING_RETRY_SLOTS',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+
+    return jsonResponse(200, {
+
+      success: true,
+
+      action:
+        'SLOT_TAKEN_OFFER_ALTERNATIVES',
+
+      conversation_id:
+        memory.conversation_id,
+
+      service_code:
+        memory.service_code,
+
+      slots:
+        refreshedSlots,
+
+      reply
+    });
+  }
+
+  throw bookingError;
+}
 
 
 const reply =
@@ -2955,7 +3188,350 @@ return jsonResponse(200, {
   reply
 });
 }
-    // =====================================================
+    // =========================================================
+// CONFLICTO DE RESERVA — ELEGIR HORARIO ALTERNATIVO
+// =========================================================
+
+if (
+  memory.state === 'OFFERING_RETRY_SLOTS' &&
+  Array.isArray(memory.offered_slots)
+) {
+
+  const normalizedRetryReply =
+    String(message || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  const acceptsSingleRetrySlot =
+    memory.offered_slots.length === 1 &&
+    (
+      normalizedRetryReply === 'si' ||
+      normalizedRetryReply.includes('me viene bien') ||
+      normalizedRetryReply.includes('me va bien') ||
+      normalizedRetryReply.includes('perfecto') ||
+      normalizedRetryReply.includes('vale') ||
+      normalizedRetryReply.includes('confirmo')
+    );
+
+  const selected =
+    acceptsSingleRetrySlot
+      ? memory.offered_slots[0]
+      : findSelectedSlot(
+          message,
+          memory.offered_slots
+        );
+
+  if (!selected) {
+
+    const options =
+      memory.offered_slots
+        .map(slot => slot.time_label)
+        .filter(Boolean)
+        .join(', ');
+
+    const reply =
+      `No he podido identificar cuál horario prefieres ✨ ` +
+      `Las opciones disponibles son: ${options}.`;
+
+    await updateConversation({
+      conversationId:
+        memory.conversation_id,
+
+      state:
+        'OFFERING_RETRY_SLOTS',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      action:
+        'NEED_RETRY_SLOT_SELECTION',
+      conversation_id:
+        memory.conversation_id,
+      slots:
+        memory.offered_slots,
+      reply
+    });
+  }
+
+  // -------------------------------------------------------
+// GUARDAR NUEVO HORARIO SELECCIONADO
+// -------------------------------------------------------
+
+await updateConversation({
+  conversationId:
+    memory.conversation_id,
+
+  selectedSlotStart:
+    selected.slot_start,
+
+  state:
+    'OFFERING_RETRY_SLOTS',
+
+  lastUserMessage:
+    message
+});
+
+
+// -------------------------------------------------------
+// REINTENTAR LA RESERVA DIRECTAMENTE
+// LOS DATOS DEL CLIENTE YA ESTÁN GUARDADOS
+// -------------------------------------------------------
+
+let retryBooking;
+
+try {
+
+  retryBooking =
+    await createBooking({
+
+      nombre:
+        memory.nombre,
+
+      apellidos:
+        memory.apellidos,
+
+      telefono:
+        memory.telefono,
+
+      email:
+        memory.email || null,
+
+      serviceCode:
+        memory.service_code,
+
+      slotStart:
+        selected.slot_start,
+
+      clinicCode:
+        memory.clinic_code || 'VALENCIA',
+
+      source:
+        memory.source || 'META',
+
+      campaign:
+        memory.campaign || null,
+
+      hasOwnPhone:
+        memory.has_own_phone ?? true,
+
+      referredByClienteId:
+        memory.referred_by_cliente_id || null,
+
+      contactName:
+        memory.contact_name || null,
+
+      contactPhone:
+        memory.contact_phone || null,
+
+      contactEmail:
+        memory.contact_email || null,
+
+      relationship:
+        memory.relationship || null,
+
+      existingLeadId:
+        memory.lead_id || null
+    });
+
+} catch (retryError) {
+
+  if (
+    retryError?.code ===
+    'SLOT_NO_LONGER_AVAILABLE'
+  ) {
+
+    const refreshedSlots =
+      await refreshAvailability({
+
+        serviceCode:
+          memory.service_code,
+
+        fromDate:
+          memory.from_date,
+
+        toDate:
+          memory.to_date ||
+          memory.from_date,
+
+        appointmentType:
+          memory.appointment_type ||
+          'first_visit',
+
+        clinicCode:
+          memory.clinic_code ||
+          'VALENCIA',
+
+        fromTime:
+          memory.from_time ||
+          null,
+
+        toTime:
+          memory.to_time ||
+          null,
+
+        maxResults:
+          3
+      });
+
+
+    if (refreshedSlots.length === 0) {
+
+      const reply =
+        'Ese horario también acaba de ocuparse ✨ ' +
+        'En esa franja ya no tengo más opciones disponibles. ' +
+        '¿Quieres que busque otro horario o un día cercano?';
+
+      await updateConversation({
+        conversationId:
+          memory.conversation_id,
+
+        state:
+          'NO_AVAILABILITY',
+
+        lastUserMessage:
+          message,
+
+        lastChloeReply:
+          reply
+      });
+
+      return jsonResponse(200, {
+        success: true,
+        action:
+          'SLOT_TAKEN_NO_ALTERNATIVES',
+        conversation_id:
+          memory.conversation_id,
+        slots: [],
+        reply
+      });
+    }
+
+
+    const optionText =
+      refreshedSlots
+        .map(slot => slot.time_label)
+        .filter(Boolean)
+        .join(', ');
+
+    const firstDate =
+      refreshedSlots[0]?.date_label ||
+      'ese día';
+
+    const reply =
+      `Ese horario también acaba de ocuparse ✨ ` +
+      `Pero para ${firstDate} todavía tengo estas opciones: ` +
+      `${optionText}. ¿Cuál te viene mejor?`;
+
+
+    await updateConversation({
+      conversationId:
+        memory.conversation_id,
+
+      offeredSlots:
+        refreshedSlots,
+
+      state:
+        'OFFERING_RETRY_SLOTS',
+
+      lastUserMessage:
+        message,
+
+      lastChloeReply:
+        reply
+    });
+
+
+    return jsonResponse(200, {
+      success: true,
+      action:
+        'SLOT_TAKEN_OFFER_ALTERNATIVES',
+      conversation_id:
+        memory.conversation_id,
+      service_code:
+        memory.service_code,
+      slots:
+        refreshedSlots,
+      reply
+    });
+  }
+
+  throw retryError;
+}
+
+
+// -------------------------------------------------------
+// RESERVA CONFIRMADA
+// -------------------------------------------------------
+
+const reply =
+  `Perfecto, ${memory.nombre} ✨ Tu cita ha quedado confirmada ` +
+  `para ${retryBooking.date_label} a las ${retryBooking.time_label}. ` +
+  `Te atenderá ${retryBooking.specialist}. ` +
+  `Aquí tienes todos los detalles de tu experiencia: ${retryBooking.oae_url}`;
+
+
+await finalizeBooking({
+  conversationId:
+    memory.conversation_id,
+
+  clienteId:
+    retryBooking.cliente_id,
+
+  appointmentId:
+    retryBooking.appointment_id,
+
+  publicCode:
+    retryBooking.public_code,
+
+  reply
+});
+
+
+return jsonResponse(200, {
+  success: true,
+
+  action:
+    'BOOKING_CONFIRMED_AFTER_REFRESH',
+
+  conversation_id:
+    memory.conversation_id,
+
+  cliente_id:
+    retryBooking.cliente_id,
+
+  appointment_id:
+    retryBooking.appointment_id,
+
+  specialist:
+    retryBooking.specialist,
+
+  service_name:
+    retryBooking.service_name,
+
+  date_label:
+    retryBooking.date_label,
+
+  time_label:
+    retryBooking.time_label,
+
+  public_code:
+    retryBooking.public_code,
+
+  oae_url:
+    retryBooking.oae_url,
+
+  reply
+});
+}
+  // =====================================================
     // 2. SI ESTAMOS ESPERANDO ELECCIÓN DE HORARIO
     // =====================================================
 // =========================================================
