@@ -3924,8 +3924,8 @@ if (!memory.nombre) {
       apellidos:
         memory.apellidos || null,
 
-      telefono:
-        memory.telefono || null,
+     telefono:
+  memory.telefono || incomingPhone || null,
 
       email:
         memory.email || null,
