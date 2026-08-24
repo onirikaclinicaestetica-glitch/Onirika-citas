@@ -687,9 +687,33 @@ async function createBooking({
     }
   );
 
-  const result = await response.json();
+    const result = await response.json();
 
   if (!response.ok || !result.success) {
+
+    if (
+      response.status === 409 &&
+      result?.code === 'SLOT_NO_LONGER_AVAILABLE'
+    ) {
+
+      const error =
+        new Error(
+          result?.error ||
+          'Ese horario acaba de dejar de estar disponible.'
+        );
+
+      error.code =
+        'SLOT_NO_LONGER_AVAILABLE';
+
+      error.action =
+        'REFRESH_AVAILABILITY';
+
+      error.status =
+        409;
+
+      throw error;
+    }
+
     throw new Error(
       result?.error ||
       'No se pudo crear la reserva'
@@ -697,7 +721,6 @@ async function createBooking({
   }
 
   return result;
-}
 
 
 // =========================================================
