@@ -3831,26 +3831,71 @@ if (
   // Verificar que ya tenemos los datos de la clienta
   // -------------------------------------------------------
 
-  if (!memory.nombre) {
+  if (
+  !memory.nombre &&
+  memory.cliente_id
+) {
 
-    const reply =
-      'Perfecto ✨ Antes de reservar, ¿me recuerdas tu nombre y apellidos?';
+  const existingClient =
+    await findExistingClient({
+      telefono:
+        memory.telefono || incomingPhone || null,
 
-    await updateConversation({
-      conversationId: memory.conversation_id,
-      selectedSlotStart: selected.slot_start,
-      state: 'AWAITING_CLIENT_DATA',
-      lastUserMessage: message,
-      lastChloeReply: reply
+      clinicCode:
+        memory.clinic_code ||
+        clinicCode ||
+        'VALENCIA'
     });
 
-    return jsonResponse(200, {
-      success: true,
-      action: 'NEED_CLIENT_DATA',
-      conversation_id: memory.conversation_id,
-      reply
-    });
+
+  if (
+    existingClient &&
+    existingClient.cliente_id ===
+      memory.cliente_id
+  ) {
+
+    memory.nombre =
+      existingClient.nombre || null;
+
+    memory.apellidos =
+      existingClient.apellidos || null;
   }
+}
+
+
+if (!memory.nombre) {
+
+  const reply =
+    'Perfecto ✨ Antes de reservar, ¿me recuerdas tu nombre y apellidos?';
+
+  await updateConversation({
+    conversationId:
+      memory.conversation_id,
+
+    selectedSlotStart:
+      selected.slot_start,
+
+    state:
+      'AWAITING_CLIENT_DATA',
+
+    lastUserMessage:
+      message,
+
+    lastChloeReply:
+      reply
+  });
+
+  return jsonResponse(200, {
+    success: true,
+    action:
+      'NEED_CLIENT_DATA',
+
+    conversation_id:
+      memory.conversation_id,
+
+    reply
+  });
+}
 
 
   // -------------------------------------------------------
